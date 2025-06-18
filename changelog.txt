@@ -1,3 +1,7 @@
+v0.2.0
+- Ported code to C++
+- Created I2S_driver class
+
 v0.1.0
 - Modified FreeRTOS freq to 1000Hz from 1000Hz
 - Increased WDT to 1500ms from 300ms to prevent WDT trigger after modifying RTOS tick

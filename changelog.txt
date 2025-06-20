@@ -1,3 +1,6 @@
+v0.2.2
+- Configurations for ADAU1966A DAC
+
 v0.2.1
 - Added "git submodule update" to setup script
 - Changed shell to bash on setup and build

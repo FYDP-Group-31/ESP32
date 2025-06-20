@@ -30,8 +30,6 @@ uint8_t *data_out_buf;
 
 QueueHandle_t data_queue;
 
-I2S_Driver i2s_driver;
-
 static bool mem_init(void);
 static void mem_deinit(void);
 
@@ -90,7 +88,7 @@ void app_main(void)
 {
     mem_init();
     
-    if (i2s_driver.init() == false)
+    if (i2s_driver_ADAU1966A.init() == false)
     {
 
     }

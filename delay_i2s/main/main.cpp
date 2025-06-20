@@ -9,14 +9,12 @@
 // #include "esp_a2dp_api.h"
 
 // Custom components
-#include "i2s_driver.hpp"
+#include "adau1966a_driver.hpp"
+#include "gpio_defs.h"
 
 extern "C" {
     void app_main(void);
 }
-
-// GPIO definitions
-#define LED_PIN             GPIO_NUM_2
 
 #define DATA_IN_BUF_LEN 2048
 #define DATA_OUT_BUF_LEN 2048
@@ -35,14 +33,14 @@ static void mem_deinit(void);
 
 static void task_toggle_led(void *args)
 {
-    gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_direction(GPIO_LED_PIN, GPIO_MODE_OUTPUT);
 
     bool led_level = false;
 
     for (;;)
     {
         led_level = !led_level;
-        gpio_set_level(LED_PIN, (uint32_t)led_level);
+        gpio_set_level(GPIO_LED_PIN, (uint32_t)led_level);
         printf("runtime = %ld\n", runtime_ms);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -88,7 +86,7 @@ void app_main(void)
 {
     mem_init();
     
-    if (i2s_driver_ADAU1966A.init() == false)
+    if (adau1966a_driver.init() == false)
     {
 
     }

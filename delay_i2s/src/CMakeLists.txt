@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "esp_it.c" "i2s_driver.cpp"
-    PRIV_REQUIRES esp_driver_i2s
+    SRCS "adau1966a_driver.cpp" "esp_it.c"
+    PRIV_REQUIRES esp_driver_i2s esp_driver_gpio
     INCLUDE_DIRS "../inc" "."
 )

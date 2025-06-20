@@ -1,16 +1,15 @@
-#include "i2s_driver.hpp"
+#include "adau1966a_driver.hpp"
 
 #include "driver/i2s_std.h"
+#include "gpio_defs.h"
 
-#define I2S_TX_BCLK_PIN     GPIO_NUM_4
-#define I2S_TX_WS_PIN       GPIO_NUM_5
-#define I2S_TX_DATA_PIN     GPIO_NUM_18
 
 #define AUDIO_SAMPLE_RATE 44100
 #define NUM_AUDIO_CHANNELS 16
-#define ADAU1966A_BIT_WIDTH I2S_DATA_BIT_WIDTH_24BIT
+#define ADAU1966A_BIT_WIDTH I2S_DATA_BIT_WIDTH_16BIT
 
-I2S_Driver i2s_driver_ADAU1966A(
+// ADAU1966A 16-bit mode
+ADAU1966A_Driver adau1966a_driver(
     NUM_AUDIO_CHANNELS,
     AUDIO_SAMPLE_RATE,
     ADAU1966A_BIT_WIDTH
@@ -25,7 +24,7 @@ static void i2s_write_task(void* args)
     vTaskDelete(NULL);
 }
 
-I2S_Driver::I2S_Driver(uint8_t num_audio_channels, uint32_t audio_sample_rate, i2s_data_bit_width_t bit_width)
+ADAU1966A_Driver::ADAU1966A_Driver(uint8_t num_audio_channels, uint32_t audio_sample_rate, i2s_data_bit_width_t bit_width)
 :   tx_ch_handle(NULL),
     fifo_handle(NULL),
     num_audio_channels(num_audio_channels),
@@ -35,12 +34,12 @@ I2S_Driver::I2S_Driver(uint8_t num_audio_channels, uint32_t audio_sample_rate, i
 
 }
 
-I2S_Driver::~I2S_Driver()
+ADAU1966A_Driver::~ADAU1966A_Driver()
 {
 
 }
 
-bool I2S_Driver::init()
+bool ADAU1966A_Driver::init()
 {
     // Initialize data structures
     if ((this->fifo_handle = xQueueCreate(2048, sizeof(uint8_t))) == NULL)
@@ -57,9 +56,9 @@ bool I2S_Driver::init()
         .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(this->bit_width, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
-            .bclk = I2S_TX_BCLK_PIN,
-            .ws = I2S_TX_WS_PIN,
-            .dout = I2S_TX_DATA_PIN,
+            .bclk = GPIO_I2S_TX_BCLK,
+            .ws = GPIO_I2S_TX_WS_PIN,
+            .dout = GPIO_I2S_TX_DATA_OUT,
             .din = I2S_GPIO_UNUSED,
             .invert_flags = {
                 .mclk_inv = false,

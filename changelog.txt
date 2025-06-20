@@ -1,3 +1,8 @@
+v0.2.3
+- Renamed I2S driver to ADAU1966A driver
+- Changed bit width to 16 bits from 24 bits
+- Created GPIO mappings
+
 v0.2.2
 - Configurations for ADAU1966A DAC
 

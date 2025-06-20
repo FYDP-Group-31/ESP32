@@ -1,3 +1,8 @@
+v0.2.1
+- Added "git submodule update" to setup script
+- Changed shell to bash on setup and build
+- Modified gitignore
+
 v0.2.0
 - Ported code to C++
 - Created I2S_driver class

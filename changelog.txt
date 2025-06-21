@@ -1,3 +1,7 @@
+v0.3.0
+- Added esp-dsp as a project dependency
+- Modified setup instructions to source esp-idf environment on setup
+
 v0.2.3
 - Renamed I2S driver to ADAU1966A driver
 - Changed bit width to 16 bits from 24 bits

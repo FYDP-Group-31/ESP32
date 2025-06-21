@@ -1,8 +1,8 @@
 #include "adau1966a_driver.hpp"
 
 #include "driver/i2s_std.h"
+#include "audio_dsp.h"
 #include "gpio_defs.h"
-
 
 #define AUDIO_SAMPLE_RATE 44100
 #define NUM_AUDIO_CHANNELS 16

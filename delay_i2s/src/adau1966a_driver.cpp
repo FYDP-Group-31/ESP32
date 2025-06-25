@@ -26,7 +26,7 @@ static void i2s_write_task(void* args)
 
 ADAU1966A_Driver::ADAU1966A_Driver(uint8_t num_audio_channels, uint32_t audio_sample_rate, i2s_data_bit_width_t bit_width)
 :   tx_ch_handle(NULL),
-    fifo_handle(NULL),
+    ringbuf(NULL),
     num_audio_channels(num_audio_channels),
     audio_sample_rate(audio_sample_rate),
     bit_width(bit_width)
@@ -42,7 +42,7 @@ ADAU1966A_Driver::~ADAU1966A_Driver()
 bool ADAU1966A_Driver::init()
 {
     // Initialize data structures
-    if ((this->fifo_handle = xQueueCreate(2048, sizeof(uint8_t))) == NULL)
+    if ((this->ringbuf = xRingbufferCreate(2048, RINGBUF_TYPE_BYTEBUF)) == NULL)
     {
         return false;
     }

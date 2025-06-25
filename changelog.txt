@@ -1,3 +1,6 @@
+v0.3.1
+- Changed FIFO queue to ring buffer implementation
+
 v0.3.0
 - Added esp-dsp as a project dependency
 - Modified setup instructions to source esp-idf environment on setup

@@ -3,14 +3,14 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
+#include "freertos/ringbuf.h"
 #include "driver/i2s_std.h"
 #include "esp_check.h"
 
 class ADAU1966A_Driver {
     private:
         i2s_chan_handle_t tx_ch_handle;
-        QueueHandle_t fifo_handle;
+        RingbufHandle_t ringbuf;
 
         uint8_t num_audio_channels;
         uint32_t audio_sample_rate;

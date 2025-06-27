@@ -1,8 +1,8 @@
 #include "adau1966a_driver.hpp"
 
-#include "driver/i2s_std.h"
 #include "audio_dsp.h"
 #include "gpio_defs.h"
+#include "esp_check.h"
 
 #define AUDIO_SAMPLE_RATE 44100
 #define NUM_AUDIO_CHANNELS 16
@@ -17,9 +17,14 @@ ADAU1966A_Driver adau1966a_driver(
 
 static void i2s_write_task(void* args)
 {
+    uint32_t count = 0;
+    vTaskSuspend(NULL); // Start task when start_threads() is called
+
     for (;;)
     {
-        taskYIELD();
+        printf("i2s_write_task %ld\n", count++);
+        // taskYIELD();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
     vTaskDelete(NULL);
 }
@@ -39,7 +44,7 @@ ADAU1966A_Driver::~ADAU1966A_Driver()
 
 }
 
-bool ADAU1966A_Driver::init()
+bool ADAU1966A_Driver::init(void)
 {
     // Initialize data structures
     if ((this->ringbuf = xRingbufferCreate(2048, RINGBUF_TYPE_BYTEBUF)) == NULL)
@@ -70,10 +75,15 @@ bool ADAU1966A_Driver::init()
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(this->tx_ch_handle, &tx_std_cfg));
 
     // Thread initialization
-    if (xTaskCreate(i2s_write_task, "i2s write", 4096, NULL, 24, NULL) != pdPASS)
+    if (xTaskCreate(i2s_write_task, "i2s write", 4096, NULL, 24, &this->write_task_handle) != pdPASS)
     {
         return false;
     }
 
     return true;
+}
+
+void ADAU1966A_Driver::start_threads(void)
+{
+    vTaskResume(this->write_task_handle);
 }

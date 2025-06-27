@@ -5,7 +5,7 @@
 #include "freertos/task.h"
 #include "freertos/ringbuf.h"
 #include "driver/i2s_std.h"
-#include "esp_check.h"
+
 
 class ADAU1966A_Driver {
     private:
@@ -15,11 +15,14 @@ class ADAU1966A_Driver {
         uint8_t num_audio_channels;
         uint32_t audio_sample_rate;
         i2s_data_bit_width_t bit_width;
+
+        TaskHandle_t write_task_handle;
     public:
         ADAU1966A_Driver(uint8_t num_audio_channels, uint32_t audio_sampling_rate, i2s_data_bit_width_t bit_width);
         ~ADAU1966A_Driver();
 
-        bool init();
+        bool init(void);
+        void start_threads(void);
 };
 
 extern ADAU1966A_Driver adau1966a_driver;

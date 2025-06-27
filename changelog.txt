@@ -1,3 +1,8 @@
+v0.4.0
+- Added support for BOYA flash memory
+- Increased flash size to 4MB from 2MB
+- Added IRAM_ATTR to vApplicationTickHook to enable safe NVS flash init
+
 v0.3.1
 - Changed FIFO queue to ring buffer implementation
 

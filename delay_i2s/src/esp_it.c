@@ -5,7 +5,7 @@
 
 uint32_t runtime_ms = 0;
 
-void vApplicationTickHook(void)
+void IRAM_ATTR vApplicationTickHook(void)
 {
     switch (xPortGetCoreID())
     {

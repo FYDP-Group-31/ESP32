@@ -1,5 +1,6 @@
 idf_component_register(
-    SRCS "audio_dsp.c" "adau1966a_driver.cpp" "esp_it.c"
-    PRIV_REQUIRES esp_driver_i2s esp_driver_gpio esp_ringbuf
+    SRCS "audio_dsp.c" "adau1966a_driver.cpp" "bluetooth_receiver.cpp" "esp_it.c"
+    REQUIRES esp_driver_i2s
+    PRIV_REQUIRES esp_driver_gpio esp_ringbuf bt nvs_flash
     INCLUDE_DIRS "../inc" "."
 )

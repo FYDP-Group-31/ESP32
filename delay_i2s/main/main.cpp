@@ -6,10 +6,9 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 
-// #include "esp_a2dp_api.h"
-
 // Custom components
 #include "adau1966a_driver.hpp"
+#include "bluetooth_receiver.hpp"
 #include "gpio_defs.h"
 
 extern "C" {
@@ -25,8 +24,6 @@ uint8_t program_run;
 
 uint8_t *data_in_buf;
 uint8_t *data_out_buf;
-
-QueueHandle_t data_queue;
 
 static bool mem_init(void);
 static void mem_deinit(void);
@@ -50,11 +47,11 @@ static void task_toggle_led(void *args)
 static void task_data_read(void *args)
 {
     assert(data_in_buf != NULL);
-    assert(data_queue != 0);
 
     for (;;)
     {
-        taskYIELD();
+        // taskYIELD();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     vTaskDelete(NULL);
@@ -86,15 +83,25 @@ void app_main(void)
 {
     mem_init();
     
-    if (adau1966a_driver.init() == false)
-    {
 
+    if (bt_receiver.init() == false)
+    {
+        printf("BT client init failed\n");
     }
+
+    // if (adau1966a_driver.init() == false)
+    // {
+    //     printf("ADAU1966A Init failed\n");
+    // }
+
+    
 
     program_run = 1;
 
     xTaskCreate(task_toggle_led, "toggle_led", 4096, NULL, 1, NULL);
     xTaskCreate(task_data_read, "data_read", 4096, NULL, 24, NULL);
+
+    // adau1966a_driver.start_threads();
 
     while (program_run == 1)
     {

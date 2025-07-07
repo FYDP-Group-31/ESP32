@@ -1,0 +1,33 @@
+v0.4.0
+- Added support for BOYA flash memory
+- Increased flash size to 4MB from 2MB
+- Added IRAM_ATTR to vApplicationTickHook to enable safe NVS flash init
+
+v0.3.1
+- Changed FIFO queue to ring buffer implementation
+
+v0.3.0
+- Added esp-dsp as a project dependency
+- Modified setup instructions to source esp-idf environment on setup
+
+v0.2.3
+- Renamed I2S driver to ADAU1966A driver
+- Changed bit width to 16 bits from 24 bits
+- Created GPIO mappings
+
+v0.2.2
+- Configurations for ADAU1966A DAC
+
+v0.2.1
+- Added "git submodule update" to setup script
+- Changed shell to bash on setup and build
+- Modified gitignore
+
+v0.2.0
+- Ported code to C++
+- Created I2S_driver class
+
+v0.1.0
+- Modified FreeRTOS freq to 1000Hz from 1000Hz
+- Increased WDT to 1500ms from 300ms to prevent WDT trigger after modifying RTOS tick
+- Created skeleton for I2S write task

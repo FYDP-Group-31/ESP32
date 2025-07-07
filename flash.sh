@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 COMPONENT="$1"
 PORT="$2"

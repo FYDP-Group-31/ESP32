@@ -84,15 +84,16 @@ void app_main(void)
     mem_init();
     
 
-    if (bt_receiver.init() == false)
-    {
-        printf("BT client init failed\n");
-    }
-
-    // if (adau1966a_driver.init() == false)
+    // Commented out until A2DP can be fully implemented
+    // if (bt_receiver.init() == false)
     // {
-    //     printf("ADAU1966A Init failed\n");
+    //     printf("BT client init failed\n");
     // }
+
+    if (adau1966a_driver.init() == false)
+    {
+        printf("ADAU1966A Init failed\n");
+    }
 
     
 
@@ -101,7 +102,7 @@ void app_main(void)
     xTaskCreate(task_toggle_led, "toggle_led", 4096, NULL, 1, NULL);
     xTaskCreate(task_data_read, "data_read", 4096, NULL, 24, NULL);
 
-    // adau1966a_driver.start_threads();
+    adau1966a_driver.start_threads();
 
     while (program_run == 1)
     {

@@ -8,6 +8,26 @@
 #define NUM_AUDIO_CHANNELS 16
 #define ADAU1966A_BIT_WIDTH I2S_DATA_BIT_WIDTH_16BIT
 
+#define SINGLE_TONE_A4_FREQ 440
+
+extern "C"
+{
+    
+};
+
+// Euclidean GCD algorithm
+static uint16_t gcd(uint16_t a, uint16_t b)
+{
+    while (b != 0)
+    {
+        a %= b;
+        a ^= b;
+        b ^= a;
+        a ^= b;
+    }
+    return a;
+}
+
 // ADAU1966A 16-bit mode
 ADAU1966A_Driver adau1966a_driver(
     NUM_AUDIO_CHANNELS,
@@ -22,6 +42,23 @@ static void i2s_write_task(void* args)
 
     for (;;)
     {
+        switch (adau1966a_driver.getAudioSource())
+        {
+            case SOURCE_INTERNAL_TONE_GENERATOR:
+            {
+                printf("internal i2s_write_task %ld\n", count++);
+                break;
+            }
+            case SOURCE_UART:
+            {
+                printf(" i2s_write_task %ld\n", count++);
+                break;
+            }
+            case SOURCE_BLUETOOTH:
+            {
+                break;
+            }
+        }
         printf("i2s_write_task %ld\n", count++);
         // taskYIELD();
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -29,9 +66,23 @@ static void i2s_write_task(void* args)
     vTaskDelete(NULL);
 }
 
+static void internal_tone_generator_task(void* args)
+{
+    for (;;)
+    {
+        if (adau1966a_driver.getAudioSource() != SOURCE_INTERNAL_TONE_GENERATOR)
+        {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    vTaskDelete(NULL);
+}
+
 ADAU1966A_Driver::ADAU1966A_Driver(uint8_t num_audio_channels, uint32_t audio_sample_rate, i2s_data_bit_width_t bit_width)
 :   tx_ch_handle(NULL),
     ringbuf(NULL),
+    audio_source(SOURCE_INTERNAL_TONE_GENERATOR),
     num_audio_channels(num_audio_channels),
     audio_sample_rate(audio_sample_rate),
     bit_width(bit_width)
@@ -86,4 +137,98 @@ bool ADAU1966A_Driver::init(void)
 void ADAU1966A_Driver::start_threads(void)
 {
     vTaskResume(this->write_task_handle);
+}
+
+
+AudioSource ADAU1966A_Driver::getAudioSource(void)
+{
+    return this->audio_source;
+}
+
+void ADAU1966A_Driver::setAudioSource(AudioSource new_source)
+{
+    if (new_source == this->audio_source)
+    {
+        return;
+    }
+
+    // TODO: Mutex
+    switch (new_source)
+    {
+        case SOURCE_INTERNAL_TONE_GENERATOR:
+        {
+            // xTaskCreate()
+            break;
+        }
+        case SOURCE_UART:
+        {
+            break;
+        }
+        case SOURCE_BLUETOOTH:
+        {
+            break;
+        }
+        default:
+        {
+            break;
+        }
+    }
+    this->audio_source = new_source;
+}
+
+TaskRet_t ADAU1966A_Driver::writeToBuffer(void)
+{
+    TaskRet_t ret = TASK_RET_OK;
+    switch (this->audio_source)
+    {
+        case SOURCE_INTERNAL_TONE_GENERATOR:
+        {
+            break;
+        }
+        case SOURCE_UART:
+        case SOURCE_BLUETOOTH:
+        default:
+        {
+            // Data is provided externally
+            ret = TASK_RET_WAIT;
+            break;
+        }
+    }
+    return ret;
+}
+
+// Private methods
+bool ADAU1966A_Driver::generate_square_wave(uint16_t amp, uint16_t freq, uint16_t sample_rate, int16_t* buf, uint16_t buf_len, uint16_t* write_len)
+{
+    // Worst case: max_buf_size = sample_rate (sample_rate and freq have no GCD other than 1)
+    /**
+     * Example: freq = 440Hz (A4), sample rate = 44.1kHz
+     * GCD(44100, 440) = 20
+     * min_buf_size = (44100/20) = 2205
+     * 2205 samples are needed to create a perfect loop
+     */
+
+    uint16_t min_buf_size = static_cast<uint16_t>(sample_rate / gcd(sample_rate, freq));
+    if (freq > 20000)
+    {
+        return false;
+    }
+    else if (buf_len < min_buf_size)
+    {
+        return false;
+    }
+    for (uint16_t i = 0; i < min_buf_size; ++i)
+    {
+        // square_wave[i] = (i % (SAMPLE_RATE / TONE_FREQ_HZ) < (SAMPLE_RATE / TONE_FREQ_HZ) / 2) ? AMPLITUDE : -AMPLITUDE;
+        if ((i % min_buf_size) < (min_buf_size >> 2))
+        {
+            buf[i] = amp;
+        }
+        else
+        {
+            buf[i] = -amp;
+        }
+    }
+    *write_len = min_buf_size;
+    return true;
 }

@@ -1,0 +1,4 @@
+- Changed FreeRTOS tick, 100Hz -> 1000Hz
+- Changed thread watchdog timer, 300ms -> 1500ms
+- Increased CPU frequency, 160MHz -> 240MHz
+- Enabled tick hook (increment timer every ms)

@@ -1,5 +1,4 @@
 #include "esp_it.h"
-#include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include <stdio.h>
 

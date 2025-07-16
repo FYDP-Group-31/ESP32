@@ -13,5 +13,4 @@ fi
 
 cd $COMPONENT
 
-# idf.py -p $PORT -b 115200 flash monitor
-idf.py -p $PORT -b 115200 flash
+idf.py -p $PORT -b 115200 flash monitor

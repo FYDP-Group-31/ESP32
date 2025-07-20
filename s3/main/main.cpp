@@ -3,6 +3,7 @@
 #include "led_strip.h"
 
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "driver/gpio.h"
 #include "driver/i2s_tdm.h"
 
@@ -16,6 +17,11 @@
 #define DEBUG_TIMER 1
 #define DEBUG_LED 0
 #define DEBUG_I2S 1
+
+
+#define I2S_MODE_STANDARD 0
+#define I2S_MODE_TDM 1
+#define OUTPUT_MODE I2S_MODE_TDM
 
 #define NUM_TDM_CHANNELS 8
 #define AUDIO_BYTE_WIDTH 2
@@ -35,15 +41,23 @@ static void rgb_led_task(void* args);
 
 void app_main(void)
 {
+#if (OUTPUT_MODE == I2S_MODE_TDM)
     i2s_tdm_init();
+#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
 
+#endif
+
+#if (OUTPUT_MODE == I2S_MODE_TDM)
     xTaskCreate(generate_square_wave_task, "Square wave generator", 8192, NULL, 5, NULL);
+#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
+
+#endif
     xTaskCreate(rgb_led_task, "RGB LED", 4096, NULL, 10, NULL);
 
     for (;;)
     {
 #if DEBUG_MODE && DEBUG_TIMER
-        printf("%lu\n", runtime_ms);
+        printf("Runtime: %lu\n", runtime_ms);
 #endif
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -91,10 +105,6 @@ static void i2s_tdm_deinit(void)
 
 static void generate_square_wave_task(void* args)
 {
-    // TODO: calculate required delay based on buffer size and sample rate
-    // Whatever the time is, delay slightly less to allow for DMA transfer to complete
-    // Use blocking calls: i2s_channel_write(handle, data, len, &bytes_written, portMAX_DELAY);
-
 #if DEBUG_MODE && DEBUG_I2S
     printf("Square wave generator task begin");
 #endif
@@ -120,9 +130,13 @@ static void generate_square_wave_task(void* args)
         period[channel] = 44100.0 / (frequency * 2);
     }
 
+#if DEBUG_MODE && DEBUG_I2S
+    int64_t t_start, t_end;
+#endif
     size_t bytes_written;
     size_t index;
     esp_err_t write_status;
+    bool _exit_task = false;
     for (;;)
     {
         for (size_t _frame = 0; _frame < frame_size; ++_frame)
@@ -140,14 +154,19 @@ static void generate_square_wave_task(void* args)
                 }
             }
         }
-
+#if DEBUG_MODE && DEBUG_I2S
+        t_start = esp_timer_get_time();
+#endif
         write_status = i2s_channel_write(i2s_chan, i2s_tdm_buf, buf_len, &bytes_written, portMAX_DELAY);
+#if DEBUG_MODE && DEBUG_I2S
+        t_end = esp_timer_get_time();
+#endif
         switch (write_status)
         {
             case ESP_OK:
             {
 #if DEBUG_MODE && DEBUG_I2S
-                printf("%u bytes written\n", bytes_written);
+                printf("%u bytes written in %lldus\n", bytes_written, (t_end - t_start));
 #endif
                 break;
             }
@@ -156,6 +175,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("Invalid I2S handle or NULL pointer\n");
 #endif
+                _exit_task = true;
                 break;
             }
             case ESP_ERR_TIMEOUT:
@@ -163,6 +183,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("I2S write timeout\n");
 #endif
+                _exit_task = true;
                 break;
             }
             case ESP_ERR_INVALID_STATE:
@@ -170,6 +191,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("I2S channel not enabled\n");
 #endif
+                _exit_task = true;
                 break;
             }
             default:
@@ -177,12 +199,19 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("Unknown return to i2s_channel_write: %d\n", write_status);
 #endif
+                _exit_task = true;
                 break;
             }
         }
+        if (_exit_task)
+        {
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
-
+#if DEBUG_MODE && DEBUG_I2S
+    printf("Exiting square wave generator task\n");
+#endif
     heap_caps_free(i2s_tdm_buf);
     vTaskDelete(NULL);
 }

@@ -3,7 +3,10 @@
 #include "led_strip.h"
 
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
+#include "esp_log.h"
 #include "driver/gpio.h"
+#include "driver/uart.h"
 #include "driver/i2s_tdm.h"
 
 #include "freertos/FreeRTOS.h"
@@ -16,9 +19,16 @@
 #define DEBUG_TIMER 1
 #define DEBUG_LED 0
 #define DEBUG_I2S 1
+#define DEBUG_UART 1
+
+#define I2S_MODE_STANDARD 0
+#define I2S_MODE_TDM 1
+#define OUTPUT_MODE I2S_MODE_TDM
 
 #define NUM_TDM_CHANNELS 8
 #define AUDIO_BYTE_WIDTH 2
+
+#define UART_RX_BUF_SIZE 1024U
 
 extern "C" {
 void app_main(void);
@@ -28,16 +38,30 @@ static i2s_chan_handle_t i2s_chan;
 static int16_t* i2s_tdm_buf;
 
 static void i2s_tdm_init(void);
-static void i2s_tdm_deinit(void);
 
+static void uart_init(void);
+
+static void uart_tx_task(void* args);
+static void uart_rx_task(void* args);
 static void generate_square_wave_task(void* args);
 static void rgb_led_task(void* args);
 
 void app_main(void)
 {
+#if (OUTPUT_MODE == I2S_MODE_TDM)
     i2s_tdm_init();
+#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
+#endif
+    uart_init();
 
+#if (OUTPUT_MODE == I2S_MODE_TDM)
+ 
     xTaskCreate(generate_square_wave_task, "Square wave generator", 8192, NULL, 5, NULL);
+#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
+
+#endif
+     xTaskCreate(uart_tx_task, "UART Master TX", 8192, NULL, 5, NULL);
+    xTaskCreate(uart_rx_task, "UART Master RX", 8192, NULL, 5, NULL);
     xTaskCreate(rgb_led_task, "RGB LED", 4096, NULL, 10, NULL);
 
     for (;;)
@@ -51,7 +75,7 @@ void app_main(void)
 
 static void i2s_tdm_init(void)
 {
-    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    i2s_chan_config_t i2s_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_SLAVE);
     ESP_ERROR_CHECK(i2s_new_channel(&i2s_chan_cfg, &i2s_chan, NULL));
 
     i2s_tdm_slot_mask_t slot_mask = (i2s_tdm_slot_mask_t)(I2S_TDM_SLOT0 | I2S_TDM_SLOT1 | I2S_TDM_SLOT2 | I2S_TDM_SLOT3 | I2S_TDM_SLOT4 | I2S_TDM_SLOT5 | I2S_TDM_SLOT6 | I2S_TDM_SLOT7);
@@ -84,19 +108,66 @@ static void i2s_tdm_init(void)
     
 }
 
-static void i2s_tdm_deinit(void)
+static void uart_init(void)
 {
-    
+    const uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, UART_RX_BUF_SIZE * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, UART_TX_GPIO, UART_RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+}
+
+static void uart_rx_task(void* args)
+{
+#if DEBUG_MODE && DEBUG_UART
+    esp_log_level_set("UART RX", ESP_LOG_INFO);
+#endif
+    uint8_t* data = (uint8_t*)heap_caps_malloc(UART_RX_BUF_SIZE + 1, MALLOC_CAP_DMA);
+    int rx_bytes;
+    for (;;)
+    {
+        rx_bytes = uart_read_bytes(UART_NUM_1, data, UART_RX_BUF_SIZE, 0); // Do not block
+#if DEBUG_MODE && DEBUG_UART
+        ESP_LOGI("UART RX", "Read %u bytes", rx_bytes);
+#endif
+        if (rx_bytes > 0)
+        {
+            // Process data
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    heap_caps_free(data);
+    vTaskDelete(NULL);
+}
+
+static void uart_tx_task(void* args)
+{
+    char* data = "hello";
+    int tx_bytes;
+#if DEBUG_MODE && DEBUG_UART
+    esp_log_level_set("UART TX", ESP_LOG_INFO);
+#endif
+    for (;;)
+    {
+        tx_bytes = uart_write_bytes(UART_NUM_1, data, strlen(data));
+#if DEBUG_MODE && DEBUG_UART
+        ESP_LOGI("UART TX", "Wrote %u bytes", tx_bytes);
+#endif
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    vTaskDelete(NULL);
 }
 
 static void generate_square_wave_task(void* args)
 {
-    // TODO: calculate required delay based on buffer size and sample rate
-    // Whatever the time is, delay slightly less to allow for DMA transfer to complete
-    // Use blocking calls: i2s_channel_write(handle, data, len, &bytes_written, portMAX_DELAY);
-
 #if DEBUG_MODE && DEBUG_I2S
-    printf("Square wave generator task begin");
+    printf("Square wave generator task begin\n");
 #endif
 
     size_t frame_size = 256;
@@ -120,9 +191,13 @@ static void generate_square_wave_task(void* args)
         period[channel] = 44100.0 / (frequency * 2);
     }
 
+#if DEBUG_MODE && DEBUG_I2S
+    int64_t t_start, t_end;
+#endif
     size_t bytes_written;
     size_t index;
     esp_err_t write_status;
+    bool _exit_task = false;
     for (;;)
     {
         for (size_t _frame = 0; _frame < frame_size; ++_frame)
@@ -140,14 +215,20 @@ static void generate_square_wave_task(void* args)
                 }
             }
         }
-
-        write_status = i2s_channel_write(i2s_chan, i2s_tdm_buf, buf_len, &bytes_written, portMAX_DELAY);
+#if DEBUG_MODE && DEBUG_I2S
+        t_start = esp_timer_get_time();
+#endif
+        // write_status = i2s_channel_write(i2s_chan, i2s_tdm_buf, buf_len, &bytes_written, portMAX_DELAY);
+        write_status = i2s_channel_write(i2s_chan, i2s_tdm_buf, buf_len, &bytes_written, 50);
+#if DEBUG_MODE && DEBUG_I2S
+        t_end = esp_timer_get_time();
+#endif
         switch (write_status)
         {
             case ESP_OK:
             {
 #if DEBUG_MODE && DEBUG_I2S
-                printf("%u bytes written\n", bytes_written);
+                printf("%u bytes written in %lldus\n", bytes_written, (t_end - t_start));
 #endif
                 break;
             }
@@ -156,6 +237,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("Invalid I2S handle or NULL pointer\n");
 #endif
+                _exit_task = true;
                 break;
             }
             case ESP_ERR_TIMEOUT:
@@ -163,6 +245,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("I2S write timeout\n");
 #endif
+                _exit_task = true;
                 break;
             }
             case ESP_ERR_INVALID_STATE:
@@ -170,6 +253,7 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("I2S channel not enabled\n");
 #endif
+                _exit_task = true;
                 break;
             }
             default:
@@ -177,12 +261,19 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
                 printf("Unknown return to i2s_channel_write: %d\n", write_status);
 #endif
+                _exit_task = true;
                 break;
             }
         }
+        if (_exit_task)
+        {
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
-
+#if DEBUG_MODE && DEBUG_I2S
+    printf("Exiting square wave generator task\n");
+#endif
     heap_caps_free(i2s_tdm_buf);
     vTaskDelete(NULL);
 }
@@ -218,7 +309,7 @@ static void rgb_led_task(void* args)
 #if DEBUG_MODE && DEBUG_LED
         printf("Brightness %d\n", brightness);
 #endif
-        led_strip_set_pixel(led_strip, 0, brightness, 0, 0);
+        led_strip_set_pixel(led_strip, 0, 0, brightness, 0);
         led_strip_refresh(led_strip);
         if (brightness)
         {

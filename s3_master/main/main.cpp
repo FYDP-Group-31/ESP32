@@ -14,17 +14,8 @@
 #include "freertos/task.h"
 
 #include "esp_it.h"
-#include "s3_gpio_config.h"
+#include "s3_config.h"
 
-#define DEBUG_MODE 1
-#define DEBUG_TIMER 1
-#define DEBUG_LED 0
-#define DEBUG_I2S 1
-#define DEBUG_UART 1
-
-#define I2S_MODE_STANDARD 0
-#define I2S_MODE_TDM 1
-#define OUTPUT_MODE I2S_MODE_TDM
 
 #define NUM_TDM_CHANNELS 8
 #define AUDIO_BYTE_WIDTH 2

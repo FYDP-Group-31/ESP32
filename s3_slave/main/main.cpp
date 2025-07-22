@@ -13,17 +13,7 @@
 #include "freertos/task.h"
 
 #include "esp_it.h"
-#include "s3_gpio_config.h"
-
-#define DEBUG_MODE 1
-#define DEBUG_TIMER 1
-#define DEBUG_LED 0
-#define DEBUG_I2S 1
-#define DEBUG_UART 1
-
-#define I2S_MODE_STANDARD 0
-#define I2S_MODE_TDM 1
-#define OUTPUT_MODE I2S_MODE_TDM
+#include "s3_config.h"
 
 #define NUM_TDM_CHANNELS 8
 #define AUDIO_BYTE_WIDTH 2
@@ -111,7 +101,7 @@ static void i2s_tdm_init(void)
 static void uart_init(void)
 {
     const uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = UART_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,

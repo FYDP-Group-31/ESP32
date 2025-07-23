@@ -1,6 +1,6 @@
 idf_component_register(
-    SRCS
+    SRCS "src/esp_it.c"
     REQUIRES
     PRIV_REQUIRES
-    INCLUDE_DIRS
+    INCLUDE_DIRS "inc"
 )

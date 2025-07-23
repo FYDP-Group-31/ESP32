@@ -22,6 +22,9 @@
 
 #define UART_RX_BUF_SIZE 1024U
 
+#define INPUT_GPIO_MASK (1ULL << SLAVE_WRITE_READY_GPIO)
+#define OUTPUT_GPIO_MASK (1ULL << MASTER_WRITE_READY_GPIO)
+
 extern "C" {
 void app_main(void);
 }
@@ -29,8 +32,8 @@ void app_main(void);
 static i2s_chan_handle_t i2s_chan;
 static int16_t* i2s_tdm_buf;
 
+static void gpio_init(void);
 static void i2s_tdm_init(void);
-
 static void uart_init(void);
 
 static void uart_tx_task(void* args);
@@ -63,6 +66,11 @@ void app_main(void)
 #endif
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
+
+static void gpio_init(void)
+{
+
 }
 
 static void i2s_tdm_init(void)

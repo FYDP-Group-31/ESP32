@@ -16,6 +16,8 @@
 #include "esp_it.h"
 #include "s3_config.h"
 
+#include "slave_comm.h" // Component to communicate with slave MCU
+
 
 #define NUM_TDM_CHANNELS 8
 #define AUDIO_BYTE_WIDTH 2
@@ -43,18 +45,11 @@ static void rgb_led_task(void* args);
 
 void app_main(void)
 {
-#if (OUTPUT_MODE == I2S_MODE_TDM)
     i2s_tdm_init();
-#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
-#endif
     uart_init();
+    slave_comm_init();
 
-#if (OUTPUT_MODE == I2S_MODE_TDM)
-    
     xTaskCreate(generate_square_wave_task, "Square wave generator", 8192, NULL, 5, NULL);
-#elif (OUTPUT_MODE == I2S_MODE_STANDARD)
-
-#endif
     xTaskCreate(uart_tx_task, "UART Master TX", 8192, NULL, 5, NULL);
     xTaskCreate(uart_rx_task, "UART Master RX", 8192, NULL, 5, NULL);
     xTaskCreate(rgb_led_task, "RGB LED", 4096, NULL, 10, NULL);
@@ -80,10 +75,17 @@ static void i2s_tdm_init(void)
 
     i2s_tdm_slot_mask_t slot_mask = (i2s_tdm_slot_mask_t)(I2S_TDM_SLOT0 | I2S_TDM_SLOT1 | I2S_TDM_SLOT2 | I2S_TDM_SLOT3 | I2S_TDM_SLOT4 | I2S_TDM_SLOT5 | I2S_TDM_SLOT6 | I2S_TDM_SLOT7);
     i2s_tdm_config_t tdm_cfg = {
-        .clk_cfg = I2S_TDM_CLK_DEFAULT_CONFIG(44100),
+        // .clk_cfg = I2S_TDM_CLK_DEFAULT_CONFIG(44100),
+        .clk_cfg = {
+            .sample_rate_hz = 44100,
+            .clk_src = I2S_CLK_SRC_DEFAULT,
+            .ext_clk_freq_hz = 0,
+            .mclk_multiple = I2S_MCLK_MULTIPLE_384,
+            .bclk_div = 8,
+        },
         .slot_cfg = I2S_TDM_PHILIPS_SLOT_DEFAULT_CONFIG(
             I2S_DATA_BIT_WIDTH_16BIT,
-            I2S_SLOT_MODE_MONO,
+            I2S_SLOT_MODE_STEREO,
             slot_mask
         ),
         .gpio_cfg = {
@@ -197,23 +199,49 @@ static void generate_square_wave_task(void* args)
     size_t index;
     esp_err_t write_status;
     bool _exit_task = false;
+    uint32_t seq = 0;
+    memset(i2s_tdm_buf, 0, sizeof(i2s_tdm_buf));
     for (;;)
     {
-        for (size_t _frame = 0; _frame < frame_size; ++_frame)
+        // for (size_t _frame = 0; _frame < frame_size; ++_frame)
+        // {
+        //     for (uint8_t _ch = 0; _ch < NUM_TDM_CHANNELS; ++_ch)
+        //     {
+        //         index = (_frame * NUM_TDM_CHANNELS) + _ch;
+        //         i2s_tdm_buf[index] = amplitude[_ch];
+
+        //         ++phase[_ch];
+        //         if (phase[_ch] >= period[_ch])
+        //         {
+        //             phase[_ch] = 0;
+        //             amplitude[_ch] = -amplitude[_ch];
+        //         }
+        //     }
+        // }
+        if (seq % 2)
         {
+            // memset(i2s_tdm_buf, 0, sizeof(i2s_tdm_buf));
             for (uint8_t _ch = 0; _ch < NUM_TDM_CHANNELS; ++_ch)
             {
-                index = (_frame * NUM_TDM_CHANNELS) + _ch;
-                i2s_tdm_buf[index] = amplitude[_ch];
-
-                ++phase[_ch];
-                if (phase[_ch] >= period[_ch])
-                {
-                    phase[_ch] = 0;
-                    amplitude[_ch] = -amplitude[_ch];
-                }
+                amplitude[_ch] = 0;
             }
         }
+        else
+        {
+            // memset(i2s_tdm_buf, 1, sizeof(i2s_tdm_buf));
+            for (uint8_t _ch = 0; _ch < NUM_TDM_CHANNELS; ++_ch)
+            {
+                amplitude[_ch] = 1;
+            }
+        }
+
+        master_set_ready(MASTER_READY);
+        while (gpio_get_level(SLAVE_WRITE_READY_GPIO) == 0)
+        {
+            // TODO: Implement timeouts if ready is not asserted in time
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        gpio_set_level(I2S_WRITE_START_GPIO, 1);
 #if DEBUG_MODE && DEBUG_I2S
         t_start = esp_timer_get_time();
 #endif
@@ -221,12 +249,14 @@ static void generate_square_wave_task(void* args)
 #if DEBUG_MODE && DEBUG_I2S
         t_end = esp_timer_get_time();
 #endif
+        master_set_ready(MASTER_NOT_READY);
+        gpio_set_level(I2S_WRITE_START_GPIO, 0);
         switch (write_status)
         {
             case ESP_OK:
             {
 #if DEBUG_MODE && DEBUG_I2S
-                printf("%u bytes written in %lldus\n", bytes_written, (t_end - t_start));
+                printf("(%lu) %u bytes written in %lldus\n", seq++, bytes_written, (t_end - t_start));
 #endif
                 break;
             }

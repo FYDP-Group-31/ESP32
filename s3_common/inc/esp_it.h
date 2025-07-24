@@ -2,6 +2,7 @@
 #define _ESP_IT_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 extern volatile uint32_t runtime_ms;
 

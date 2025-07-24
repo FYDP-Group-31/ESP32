@@ -4,10 +4,10 @@
 #include "driver/gpio.h"
 
 #define DEBUG_MODE              1
-#define DEBUG_TIMER             1
+#define DEBUG_TIMER             0
 #define DEBUG_LED               0
 #define DEBUG_I2S               1
-#define DEBUG_UART              1
+#define DEBUG_UART              0
 
 // Common GPIO mappings
 #define I2S_BCLK_GPIO           GPIO_NUM_4
@@ -16,6 +16,7 @@
 #define I2S_MCLK_GPIO           GPIO_NUM_7
 #define UART_RX_GPIO            GPIO_NUM_16
 #define UART_TX_GPIO            GPIO_NUM_17
+#define I2S_WRITE_START_GPIO    GPIO_NUM_18
 
 // Slave GPIO mappings
 #define SLAVE_WRITE_READY_GPIO  GPIO_NUM_14
@@ -27,8 +28,5 @@
 #define UART_BAUD_RATE          2000000
 
 // I2S configs
-#define I2S_MODE_STANDARD       0
-#define I2S_MODE_TDM            1
-#define OUTPUT_MODE             (I2S_MODE_TDM)
 
 #endif

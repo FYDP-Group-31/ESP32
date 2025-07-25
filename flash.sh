@@ -11,10 +11,6 @@ if [ -n "$PID" ]; then
     kill -9 "$PID"
 fi
 
-# Erase flash before writing
-# Commented out as it should be erased in idf.py flash
-# python3 -m esptool --chip esp32 erase_flash
-
 cd $COMPONENT
 
 idf.py -p $PORT -b 115200 flash monitor

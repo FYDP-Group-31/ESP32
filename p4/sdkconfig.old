@@ -711,14 +711,14 @@ CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_ESPTOOLPY_FLASHFREQ_VAL=80
 CONFIG_ESPTOOLPY_FLASHFREQ="80m"
 # CONFIG_ESPTOOLPY_FLASHSIZE_1MB is not set
-CONFIG_ESPTOOLPY_FLASHSIZE_2MB=y
+# CONFIG_ESPTOOLPY_FLASHSIZE_2MB is not set
 # CONFIG_ESPTOOLPY_FLASHSIZE_4MB is not set
 # CONFIG_ESPTOOLPY_FLASHSIZE_8MB is not set
-# CONFIG_ESPTOOLPY_FLASHSIZE_16MB is not set
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 # CONFIG_ESPTOOLPY_FLASHSIZE_32MB is not set
 # CONFIG_ESPTOOLPY_FLASHSIZE_64MB is not set
 # CONFIG_ESPTOOLPY_FLASHSIZE_128MB is not set
-CONFIG_ESPTOOLPY_FLASHSIZE="2MB"
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 # CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE is not set
 CONFIG_ESPTOOLPY_BEFORE_RESET=y
 # CONFIG_ESPTOOLPY_BEFORE_NORESET is not set
@@ -797,6 +797,92 @@ CONFIG_COMPILER_ORPHAN_SECTIONS_WARNING=y
 #
 
 #
+# Driver Configurations
+#
+
+#
+# Legacy TWAI Driver Configurations
+#
+# CONFIG_TWAI_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy TWAI Driver Configurations
+
+#
+# Legacy ADC Driver Configuration
+#
+# CONFIG_ADC_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_ADC_SKIP_LEGACY_CONFLICT_CHECK is not set
+
+#
+# Legacy ADC Calibration Configuration
+#
+# CONFIG_ADC_CALI_SUPPRESS_DEPRECATE_WARN is not set
+# end of Legacy ADC Calibration Configuration
+# end of Legacy ADC Driver Configuration
+
+#
+# Legacy MCPWM Driver Configurations
+#
+# CONFIG_MCPWM_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_MCPWM_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy MCPWM Driver Configurations
+
+#
+# Legacy Timer Group Driver Configurations
+#
+# CONFIG_GPTIMER_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_GPTIMER_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy Timer Group Driver Configurations
+
+#
+# Legacy RMT Driver Configurations
+#
+# CONFIG_RMT_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_RMT_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy RMT Driver Configurations
+
+#
+# Legacy I2S Driver Configurations
+#
+# CONFIG_I2S_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_I2S_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy I2S Driver Configurations
+
+#
+# Legacy I2C Driver Configurations
+#
+# CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy I2C Driver Configurations
+
+#
+# Legacy PCNT Driver Configurations
+#
+# CONFIG_PCNT_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_PCNT_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy PCNT Driver Configurations
+
+#
+# Legacy SDM Driver Configurations
+#
+# CONFIG_SDM_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_SDM_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy SDM Driver Configurations
+
+#
+# Legacy Temperature Sensor Driver Configurations
+#
+# CONFIG_TEMP_SENSOR_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_TEMP_SENSOR_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy Temperature Sensor Driver Configurations
+
+#
+# Legacy Touch Sensor Driver Configurations
+#
+# CONFIG_TOUCH_SUPPRESS_DEPRECATE_WARN is not set
+# CONFIG_TOUCH_SKIP_LEGACY_CONFLICT_CHECK is not set
+# end of Legacy Touch Sensor Driver Configurations
+# end of Driver Configurations
+
+#
 # eFuse Bit Manager
 #
 # CONFIG_EFUSE_CUSTOM_TABLE is not set
@@ -811,10 +897,151 @@ CONFIG_ESP_ERR_TO_NAME_LOOKUP=y
 # end of Common ESP-related
 
 #
+# ESP-Driver:Analog Comparator Configurations
+#
+CONFIG_ANA_CMPR_ISR_HANDLER_IN_IRAM=y
+# CONFIG_ANA_CMPR_CTRL_FUNC_IN_IRAM is not set
+# CONFIG_ANA_CMPR_ISR_CACHE_SAFE is not set
+CONFIG_ANA_CMPR_OBJ_CACHE_SAFE=y
+# CONFIG_ANA_CMPR_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:Analog Comparator Configurations
+
+#
+# BitScrambler Configurations
+#
+# CONFIG_BITSCRAMBLER_CTRL_FUNC_IN_IRAM is not set
+# end of BitScrambler Configurations
+
+#
 # ESP-Driver:GPIO Configurations
 #
 # CONFIG_GPIO_CTRL_FUNC_IN_IRAM is not set
 # end of ESP-Driver:GPIO Configurations
+
+#
+# ESP-Driver:GPTimer Configurations
+#
+CONFIG_GPTIMER_ISR_HANDLER_IN_IRAM=y
+# CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM is not set
+# CONFIG_GPTIMER_ISR_CACHE_SAFE is not set
+CONFIG_GPTIMER_OBJ_CACHE_SAFE=y
+# CONFIG_GPTIMER_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:GPTimer Configurations
+
+#
+# ESP-Driver:I2C Configurations
+#
+# CONFIG_I2C_ISR_IRAM_SAFE is not set
+# CONFIG_I2C_ENABLE_DEBUG_LOG is not set
+# CONFIG_I2C_ENABLE_SLAVE_DRIVER_VERSION_2 is not set
+CONFIG_I2C_MASTER_ISR_HANDLER_IN_IRAM=y
+# end of ESP-Driver:I2C Configurations
+
+#
+# ESP-Driver:I2S Configurations
+#
+# CONFIG_I2S_ISR_IRAM_SAFE is not set
+# CONFIG_I2S_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:I2S Configurations
+
+#
+# ESP-Driver:LEDC Configurations
+#
+# CONFIG_LEDC_CTRL_FUNC_IN_IRAM is not set
+# end of ESP-Driver:LEDC Configurations
+
+#
+# ESP-Driver:MCPWM Configurations
+#
+# CONFIG_MCPWM_ISR_IRAM_SAFE is not set
+# CONFIG_MCPWM_CTRL_FUNC_IN_IRAM is not set
+# CONFIG_MCPWM_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:MCPWM Configurations
+
+#
+# ESP-Driver:Parallel IO Configurations
+#
+CONFIG_PARLIO_TX_ISR_HANDLER_IN_IRAM=y
+CONFIG_PARLIO_RX_ISR_HANDLER_IN_IRAM=y
+# CONFIG_PARLIO_TX_ISR_CACHE_SAFE is not set
+# CONFIG_PARLIO_RX_ISR_CACHE_SAFE is not set
+CONFIG_PARLIO_OBJ_CACHE_SAFE=y
+# CONFIG_PARLIO_ENABLE_DEBUG_LOG is not set
+# CONFIG_PARLIO_ISR_IRAM_SAFE is not set
+# end of ESP-Driver:Parallel IO Configurations
+
+#
+# ESP-Driver:PCNT Configurations
+#
+# CONFIG_PCNT_CTRL_FUNC_IN_IRAM is not set
+# CONFIG_PCNT_ISR_IRAM_SAFE is not set
+# CONFIG_PCNT_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:PCNT Configurations
+
+#
+# ESP-Driver:RMT Configurations
+#
+CONFIG_RMT_ENCODER_FUNC_IN_IRAM=y
+CONFIG_RMT_TX_ISR_HANDLER_IN_IRAM=y
+CONFIG_RMT_RX_ISR_HANDLER_IN_IRAM=y
+# CONFIG_RMT_RECV_FUNC_IN_IRAM is not set
+# CONFIG_RMT_TX_ISR_CACHE_SAFE is not set
+# CONFIG_RMT_RX_ISR_CACHE_SAFE is not set
+CONFIG_RMT_OBJ_CACHE_SAFE=y
+# CONFIG_RMT_ENABLE_DEBUG_LOG is not set
+# CONFIG_RMT_ISR_IRAM_SAFE is not set
+# end of ESP-Driver:RMT Configurations
+
+#
+# ESP-Driver:Sigma Delta Modulator Configurations
+#
+# CONFIG_SDM_CTRL_FUNC_IN_IRAM is not set
+# CONFIG_SDM_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:Sigma Delta Modulator Configurations
+
+#
+# ESP-Driver:SPI Configurations
+#
+# CONFIG_SPI_MASTER_IN_IRAM is not set
+CONFIG_SPI_MASTER_ISR_IN_IRAM=y
+# CONFIG_SPI_SLAVE_IN_IRAM is not set
+CONFIG_SPI_SLAVE_ISR_IN_IRAM=y
+# end of ESP-Driver:SPI Configurations
+
+#
+# ESP-Driver:Temperature Sensor Configurations
+#
+# CONFIG_TEMP_SENSOR_ENABLE_DEBUG_LOG is not set
+# CONFIG_TEMP_SENSOR_ISR_IRAM_SAFE is not set
+# end of ESP-Driver:Temperature Sensor Configurations
+
+#
+# ESP-Driver:TWAI Configurations
+#
+# CONFIG_TWAI_ISR_IN_IRAM is not set
+# CONFIG_TWAI_ISR_CACHE_SAFE is not set
+# CONFIG_TWAI_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:TWAI Configurations
+
+#
+# ESP-Driver:UART Configurations
+#
+# CONFIG_UART_ISR_IN_IRAM is not set
+# end of ESP-Driver:UART Configurations
+
+#
+# ESP-Driver:UHCI Configurations
+#
+# CONFIG_UHCI_ISR_HANDLER_IN_IRAM is not set
+# CONFIG_UHCI_ISR_CACHE_SAFE is not set
+# CONFIG_UHCI_ENABLE_DEBUG_LOG is not set
+# end of ESP-Driver:UHCI Configurations
+
+#
+# ESP-Driver:USB Serial/JTAG Configuration
+#
+CONFIG_USJ_ENABLE_USB_SERIAL_JTAG=y
+# end of ESP-Driver:USB Serial/JTAG Configuration
 
 #
 # Hardware Settings
@@ -891,7 +1118,7 @@ CONFIG_ESP_REGI2C_CTRL_FUNC_IN_IRAM=y
 #
 # GDMA Configurations
 #
-# CONFIG_GDMA_CTRL_FUNC_IN_IRAM is not set
+CONFIG_GDMA_CTRL_FUNC_IN_IRAM=y
 CONFIG_GDMA_ISR_HANDLER_IN_IRAM=y
 CONFIG_GDMA_OBJ_DRAM_SAFE=y
 # CONFIG_GDMA_ENABLE_DEBUG_LOG is not set
@@ -960,8 +1187,18 @@ CONFIG_ESP_BROWNOUT_USE_INTR=y
 # end of RTC Backup Battery
 # end of Power Supplier
 
+CONFIG_ESP_SPI_BUS_LOCK_ISR_FUNCS_IN_IRAM=y
 CONFIG_ESP_INTR_IN_IRAM=y
 # end of Hardware Settings
+
+#
+# ESP-Driver:LCD Controller Configurations
+#
+# CONFIG_LCD_ENABLE_DEBUG_LOG is not set
+# CONFIG_LCD_RGB_ISR_IRAM_SAFE is not set
+# CONFIG_LCD_RGB_RESTART_IN_VSYNC is not set
+# CONFIG_LCD_DSI_ISR_IRAM_SAFE is not set
+# end of ESP-Driver:LCD Controller Configurations
 
 #
 # ESP-MM: Memory Management Configurations
@@ -982,6 +1219,18 @@ CONFIG_PM_SLEEP_FUNC_IN_IRAM=y
 CONFIG_PM_SLP_IRAM_OPT=y
 # CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP is not set
 # end of Power Management
+
+#
+# ESP PSRAM
+#
+# CONFIG_SPIRAM is not set
+# end of ESP PSRAM
+
+#
+# ESP Ringbuf
+#
+# CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH is not set
+# end of ESP Ringbuf
 
 #
 # ESP-ROM
@@ -1099,7 +1348,7 @@ CONFIG_ESP_TIMER_IMPL_SYSTIMER=y
 # Kernel
 #
 # CONFIG_FREERTOS_UNICORE is not set
-CONFIG_FREERTOS_HZ=100
+CONFIG_FREERTOS_HZ=1000
 # CONFIG_FREERTOS_CHECK_STACKOVERFLOW_NONE is not set
 # CONFIG_FREERTOS_CHECK_STACKOVERFLOW_PTRVAL is not set
 CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
@@ -1473,7 +1722,7 @@ CONFIG_SPI_FLASH_WRITE_CHUNK_SIZE=8192
 CONFIG_SPI_FLASH_VENDOR_XMC_SUPPORTED=y
 # CONFIG_SPI_FLASH_SUPPORT_ISSI_CHIP is not set
 # CONFIG_SPI_FLASH_SUPPORT_MXIC_CHIP is not set
-# CONFIG_SPI_FLASH_SUPPORT_GD_CHIP is not set
+CONFIG_SPI_FLASH_SUPPORT_GD_CHIP=y
 # CONFIG_SPI_FLASH_SUPPORT_WINBOND_CHIP is not set
 # CONFIG_SPI_FLASH_SUPPORT_BOYA_CHIP is not set
 # CONFIG_SPI_FLASH_SUPPORT_TH_CHIP is not set
@@ -1481,6 +1730,45 @@ CONFIG_SPI_FLASH_VENDOR_XMC_SUPPORTED=y
 
 CONFIG_SPI_FLASH_ENABLE_ENCRYPTED_READ_WRITE=y
 # end of SPI Flash driver
+
+#
+# Unity unit testing library
+#
+CONFIG_UNITY_ENABLE_FLOAT=y
+CONFIG_UNITY_ENABLE_DOUBLE=y
+# CONFIG_UNITY_ENABLE_64BIT is not set
+# CONFIG_UNITY_ENABLE_COLOR is not set
+CONFIG_UNITY_ENABLE_IDF_TEST_RUNNER=y
+# CONFIG_UNITY_ENABLE_FIXTURE is not set
+# CONFIG_UNITY_ENABLE_BACKTRACE_ON_FAIL is not set
+# CONFIG_UNITY_TEST_ORDER_BY_FILE_PATH_AND_LINE is not set
+# end of Unity unit testing library
+
+#
+# CMake Utilities
+#
+# CONFIG_CU_RELINKER_ENABLE is not set
+# CONFIG_CU_DIAGNOSTICS_COLOR_NEVER is not set
+CONFIG_CU_DIAGNOSTICS_COLOR_ALWAYS=y
+# CONFIG_CU_DIAGNOSTICS_COLOR_AUTO is not set
+# CONFIG_CU_GCC_LTO_ENABLE is not set
+# CONFIG_CU_GCC_STRING_1BYTE_ALIGN is not set
+# end of CMake Utilities
+
+#
+# Bus Options
+#
+
+#
+# I2C Bus Options
+#
+CONFIG_I2C_BUS_DYNAMIC_CONFIG=y
+CONFIG_I2C_MS_TO_WAIT=200
+# CONFIG_I2C_BUS_BACKWARD_CONFIG is not set
+# CONFIG_I2C_BUS_SUPPORT_SOFTWARE is not set
+# CONFIG_I2C_BUS_REMOVE_NULL_MEM_ADDR is not set
+# end of I2C Bus Options
+# end of Bus Options
 # end of Component config
 
 # CONFIG_IDF_EXPERIMENTAL_FEATURES is not set

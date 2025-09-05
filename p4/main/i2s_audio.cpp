@@ -1,4 +1,4 @@
-#include "i2s_audio.h"
+#include "i2s_audio.hpp"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,12 +16,12 @@
 
 #define SAMPLE_RATE 48000
 #define TDM_SLOTS 16
-#define BITS_PER_SAMPLE 16
+#define BITS_PER_SAMPLE I2S_DATA_BIT_WIDTH_16BIT
 
 // Number of I2S frames per single write
 #define FRAMES_PER_CHUNK 256
 
-#define SLOT_MASK_TDM16 ((1U << TDM_SLOTS) - 1U)
+#define SLOT_MASK_TDM16 (i2s_tdm_slot_mask_t)((1U << TDM_SLOTS) - 1U)
 
 // Type definitions
 typedef int16_t sample_t;
@@ -46,49 +46,58 @@ void i2s_audio_adau1966a_init(void)
 
     // Initialize channel
     ESP_LOGI(TAG, "Initializing I2S Audio ADAU1966A peripheral");
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    chan_cfg.dma_frame_num = 120;
-    chan_cfg.dma_desc_num = 6;
-    chan_cfg.auto_clear = true;
+
+    i2s_chan_config_t chan_cfg = {
+        .id = I2S_NUM_0,
+        .role = I2S_ROLE_MASTER,
+        .dma_desc_num = 6,
+        .dma_frame_num = 120,
+        .auto_clear = true,
+        .auto_clear_before_cb = false,
+        .allow_pd = false,
+        .intr_priority = 0
+    };
+
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &i2s_audio_adau1966a_channel, NULL));
 
-    // Initialize clock configs
-    i2s_tdm_clk_config_t tdm_clk = {
-        .sample_rate_hz     = SAMPLE_RATE,
-        .clk_src            = I2S_CLK_SRC_APLL,
-        .mclk_multiple      = I2S_MCLK_MULTIPLE_768,
-        .bclk_div           = 0,
-        .ext_clk_freq_hz    = 0,
-    };
-
-    // Initialize TDM16 slot configs
-    i2s_tdm_slot_config_t tdm_slot = I2S_TDM_PHILIPS_SLOT_DEFAULT_CONFIG(BITS_PER_SAMPLE, I2S_SLOT_MODE_STEREO, SLOT_MASK_TDM16);
-    tdm_slot.total_slot     = TDM_SLOTS;
-    tdm_slot.slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT;
-    tdm_slot.ws_width       = I2S_TDM_AUTO_WS_WIDTH;
-    tdm_slot.skip_mask      = false;
-
-    // Initialize GPIO configs
-    i2s_tdm_gpio_config_t tdm_gpio = {
-        .mclk = I2S_MCLK_GPIO,
-        .bclk = I2S_BCLK_GPIO,
-        .ws   = I2S_WS_GPIO,
-        .dout = I2S_DOUT_GPIO,
-        .din  = GPIO_NUM_NC,
-        .invert_flags = {
-            .mclk_inv = 0,
-            .bclk_inv = 0,
-            .ws_inv   = 0,
-        },
-    };
-
-    // Initialize settings to TX channel
      i2s_tdm_config_t tdm_cfg = {
-        .clk_cfg  = tdm_clk,
-        .slot_cfg = tdm_slot,
-        .gpio_cfg = tdm_gpio,
+        .clk_cfg  = {
+            .sample_rate_hz = SAMPLE_RATE,
+            .clk_src = I2S_CLK_SRC_APLL,
+            .ext_clk_freq_hz = 0,
+            .mclk_multiple = I2S_MCLK_MULTIPLE_768,
+            .bclk_div = 0
+        },
+        .slot_cfg = {
+            .data_bit_width = BITS_PER_SAMPLE,
+            .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
+            .slot_mode = I2S_SLOT_MODE_STEREO,
+            .slot_mask = SLOT_MASK_TDM16,
+            .ws_width = I2S_TDM_AUTO_WS_WIDTH,
+            .ws_pol = false,
+            .bit_shift = true,
+            .left_align = false,
+            .big_endian = false,
+            .bit_order_lsb = false,
+            .skip_mask = false,
+            .total_slot = TDM_SLOTS
+        },
+        .gpio_cfg = {
+            .mclk = I2S_MCLK_GPIO,
+            .bclk = I2S_BCLK_GPIO,
+            .ws   = I2S_WS_GPIO,
+            .dout = I2S_DOUT_GPIO,
+            .din  = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .mclk_inv = 0,
+                .bclk_inv = 0,
+                .ws_inv   = 0,
+            }
+        }
     };
+
     ESP_ERROR_CHECK(i2s_channel_init_tdm_mode(i2s_audio_adau1966a_channel, &tdm_cfg));
+
     gen_state.phase = 0;
     gen_state.step = 128;
 }
@@ -100,9 +109,10 @@ void i2s_audio_max98357_init(void)
     gpio_config_t en_io = {
         .pin_bit_mask = 1ULL << MAX98357_EN_GPIO,
         .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = 0,
-        .pull_down_en = 0,
-        .intr_type = GPIO_INTR_DISABLE
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+        .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
     };
     gpio_config(&en_io);
     gpio_set_level(MAX98357_EN_GPIO, MAX98357_ENABLE);
@@ -115,7 +125,9 @@ void i2s_audio_max98357_init(void)
         .clk_cfg = {
             .sample_rate_hz = SAMPLE_RATE,
             .clk_src = I2S_CLK_SRC_DEFAULT,
+            .ext_clk_freq_hz = 0,
             .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+            .bclk_div = 0
         },
         .slot_cfg = {
             .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
@@ -124,7 +136,7 @@ void i2s_audio_max98357_init(void)
             .slot_mask = I2S_STD_SLOT_BOTH,
             .ws_width = I2S_DATA_BIT_WIDTH_16BIT,
             .ws_pol = false,
-            .bit_shift = true,                  // Philips format: data delayed by one bit
+            .bit_shift = true,
             .left_align = false,
             .big_endian = false,
             .bit_order_lsb = false,

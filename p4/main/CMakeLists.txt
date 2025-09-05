@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS
-        "main.c"
-        "i2s_audio.c"
+        "main.cpp"
+        "i2s_audio.cpp"
     PRIV_REQUIRES
         "esp_timer"
         "esp_driver_i2s"

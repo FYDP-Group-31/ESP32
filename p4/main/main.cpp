@@ -3,9 +3,11 @@
 
 #include "esp_log.h"
 
-#include "i2s_audio.h"
+#include "i2s_audio.hpp"
 
-static void uart_rx_task(void* args);
+extern "C" {
+    void app_main(void);
+}
 
 void app_main(void)
 {   

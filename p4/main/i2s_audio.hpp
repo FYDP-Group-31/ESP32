@@ -1,5 +1,5 @@
-#ifndef _I2S_AUDIO_H_
-#define _I2S_AUDIO_H_
+#ifndef _I2S_AUDIO_HPP_
+#define _I2S_AUDIO_HPP_
 
 #include <stdbool.h>
 
@@ -18,4 +18,4 @@ bool i2s_audio_set_source(AudioSource_E new_source);
 void i2s_audio_adau1966a_task(void* args);
 void i2s_audio_max98357_task(void* args);
 
-#endif // _I2S_AUDIO_H_
+#endif // _I2S_AUDIO_HPP_

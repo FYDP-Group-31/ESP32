@@ -11,6 +11,7 @@
 
 #include <string.h>
 #include <math.h>
+#include <memory>
 
 #include "gpio_defs.h"
 
@@ -29,6 +30,9 @@ typedef struct {
     uint32_t phase;
     uint32_t step;
 } gen_state_t;
+
+// static std::unique_ptr<ADAU1966A> adau1966a;
+// static std::unique_ptr<MAX98357> max98357;
 
 // Static function declarations
 static bool _get_next_tdm_frame(sample_t* frame, uint8_t channels);
@@ -60,7 +64,7 @@ void i2s_audio_adau1966a_init(void)
 
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &i2s_audio_adau1966a_channel, NULL));
 
-     i2s_tdm_config_t tdm_cfg = {
+    i2s_tdm_config_t tdm_cfg = {
         .clk_cfg  = {
             .sample_rate_hz = SAMPLE_RATE,
             .clk_src = I2S_CLK_SRC_APLL,
@@ -276,4 +280,16 @@ void i2s_audio_max98357_task(void* args)
     }
     heap_caps_free(chunk);
     vTaskDelete(NULL);
+}
+
+ADAU1966A::ADAU1966A(const char* TAG)
+:   TAG(TAG)
+{
+
+}
+
+MAX98357::MAX98357(const char* TAG)
+:   TAG(TAG)
+{
+
 }

@@ -1,5 +1,4 @@
-#ifndef _GPIO_DEFS_H_
-#define _GPIO_DEFS_H_
+#pragma once
 
 #include "driver/gpio.h"
 
@@ -15,5 +14,3 @@
 
 #define MAX98357_ENABLE 1
 #define MAX98357_DISABLE 0
-
-#endif // _GPIO_DEFS_H_

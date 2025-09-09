@@ -1,12 +1,5 @@
-// FreeRTOS
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
 // C++
 #include <cassert>
-
-// ESP-IDF
-#include "esp_log.h"
 
 // Components
 #include "adau1966a.hpp"

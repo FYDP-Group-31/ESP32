@@ -9,6 +9,9 @@
 
 #include "gpio_defs.h"
 
+// Type macros
+typedef int16_t sample_t;
+
 class ADAU1966A {
     private:
         gpio_num_t mclk_gpio;
@@ -17,6 +20,8 @@ class ADAU1966A {
         gpio_num_t data_gpio;
 
         i2s_chan_handle_t channel;
+
+        sample_t* chunk;
 
         bool thread_running;
         TaskHandle_t task;
@@ -36,6 +41,7 @@ class ADAU1966A {
         ~ADAU1966A();
 
         bool init();
+        void deinit();
         bool start_thread();
         void stop_thread();
 };

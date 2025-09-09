@@ -4,7 +4,8 @@
 #include <cassert>
 
 #include "esp_log.h"
-
+#include "esp_heap_caps.h"
+#include "esp_timer.h"
 
 #define SAMPLE_RATE 48000
 #define TDM_SLOTS 16
@@ -39,6 +40,7 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
     ws_gpio(ws_gpio),
     data_gpio(data_gpio),
     channel(nullptr),
+    chunk(nullptr),
     thread_running(false),
     task(nullptr)
 {
@@ -47,12 +49,20 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
 
 ADAU1966A::~ADAU1966A()
 {
-
+    this->deinit();
 }
 
 bool ADAU1966A::init()
 {
-    ESP_LOGI(ADAU1966A::TAG, "Initializing I2S Peripheral:");
+    const size_t bytes_per_frame = TDM_SLOTS * sizeof(sample_t);
+    const size_t bytes_per_chunk = FRAMES_PER_CHUNK * bytes_per_frame;
+    this->chunk = (sample_t*)heap_caps_malloc(bytes_per_chunk, MALLOC_CAP_DMA);
+    if (this->chunk == nullptr)
+    {
+        ESP_LOGE(ADAU1966A::TAG, "Could not allocate %d bytes of DMA memory", bytes_per_chunk);
+        return false;
+    }
+    memset(this->chunk, 0, bytes_per_chunk);
 
     i2s_chan_config_t channel_cfg = {
         .id = I2S_NUM_0, // Make argument??
@@ -107,6 +117,11 @@ bool ADAU1966A::init()
     return true;
 }
 
+void ADAU1966A::deinit()
+{
+    heap_caps_free(this->chunk);
+}
+
 bool ADAU1966A::start_thread()
 {
     if (this->task != nullptr)
@@ -145,6 +160,10 @@ void ADAU1966A::thread_entry(void* pv)
 
 void ADAU1966A::run_thread()
 {
+    const size_t bytes_per_frame = TDM_SLOTS * sizeof(sample_t);
+    const size_t bytes_per_chunk = FRAMES_PER_CHUNK * bytes_per_frame;
+    sample_t channel_frame[TDM_SLOTS] = {0};
+
     ESP_ERROR_CHECK(i2s_channel_enable(this->channel));
     for (;;)
     {
@@ -152,8 +171,28 @@ void ADAU1966A::run_thread()
         {
             break;
         }
-        // ESP_LOGI(ADAU1966A::TAG, "Running thread on core %d", xPortGetCoreID());
-        vTaskDelay(pdMS_TO_TICKS(1));
+
+        for (size_t frame_num = 0U; frame_num < FRAMES_PER_CHUNK; ++frame_num)
+        {
+            for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
+            {
+                this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
+            }
+        }
+        size_t bytes_written = 0;
+        int64_t start = esp_timer_get_time();
+        esp_err_t ret = i2s_channel_write(this->channel, this->chunk, bytes_per_chunk, &bytes_written, portMAX_DELAY);
+        int64_t end   = esp_timer_get_time();
+        if (ret == ESP_OK)
+        {
+            ESP_LOGI(ADAU1966A::TAG, "Wrote %d bytes in %dus on core %d", bytes_written, (end - start), xPortGetCoreID());
+        }
+        else
+        {
+            ESP_LOGE(ADAU1966A::TAG, "Failed to write chunk to I2S channel. %dB expected, %dB written", bytes_per_chunk, bytes_written);
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        
     }
     ESP_ERROR_CHECK(i2s_channel_disable(this->channel));
 }

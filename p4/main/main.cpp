@@ -10,6 +10,7 @@
 
 // Components
 #include "adau1966a.hpp"
+#include "max98357a.hpp"
 
 extern "C" {
     void app_main(void);

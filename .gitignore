@@ -54,3 +54,5 @@ dkms.conf
 build/
 .vscode
 managed_components/
+venv/
+

@@ -7,6 +7,8 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 
+#define DEBUG 0
+
 #define SAMPLE_RATE 48000
 #define TDM_SLOTS 16
 #define BITS_PER_SAMPLE I2S_DATA_BIT_WIDTH_16BIT
@@ -40,6 +42,7 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
     ws_gpio(ws_gpio),
     data_gpio(data_gpio),
     channel(nullptr),
+    async_dma_driver(nullptr),
     chunk(nullptr),
     thread_running(false),
     task(nullptr)
@@ -63,6 +66,14 @@ bool ADAU1966A::init()
         return false;
     }
     memset(this->chunk, 0, bytes_per_chunk);
+
+    async_memcpy_config_t async_dma_config = {
+        .backlog = 16U,
+        .sram_trans_align = 0U,
+        .dma_burst_size = bytes_per_frame,
+        .flags = 0U
+    };
+    ESP_ERROR_CHECK(esp_async_memcpy_install(&async_dma_config, &this->async_dma_driver));
 
     i2s_chan_config_t channel_cfg = {
         .id = I2S_NUM_0, // Make argument??
@@ -120,6 +131,9 @@ bool ADAU1966A::init()
 void ADAU1966A::deinit()
 {
     heap_caps_free(this->chunk);
+    this->chunk = nullptr;
+
+    ESP_ERROR_CHECK(esp_async_memcpy_uninstall(this->async_dma_driver));
 }
 
 bool ADAU1966A::start_thread()
@@ -180,12 +194,18 @@ void ADAU1966A::run_thread()
             }
         }
         size_t bytes_written = 0;
+#if DEBUG
         int64_t start = esp_timer_get_time();
+#endif // DEBUG
         esp_err_t ret = i2s_channel_write(this->channel, this->chunk, bytes_per_chunk, &bytes_written, portMAX_DELAY);
+#if DEBUG
         int64_t end   = esp_timer_get_time();
+#endif // DEBUG
         if (ret == ESP_OK)
         {
+#if DEBUG
             ESP_LOGI(ADAU1966A::TAG, "Wrote %d bytes in %dus on core %d", bytes_written, (end - start), xPortGetCoreID());
+#endif // DEBUG
         }
         else
         {

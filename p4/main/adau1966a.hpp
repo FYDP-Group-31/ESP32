@@ -7,6 +7,8 @@
 #include "driver/i2s_types.h"
 #include "driver/i2s_common.h"
 
+#include "esp_async_memcpy.h"
+
 #include "gpio_defs.h"
 
 // Type macros
@@ -20,6 +22,7 @@ class ADAU1966A {
         gpio_num_t data_gpio;
 
         i2s_chan_handle_t channel;
+        async_memcpy_handle_t async_dma_driver;
 
         sample_t* chunk;
 

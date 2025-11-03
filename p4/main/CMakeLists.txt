@@ -3,9 +3,11 @@ idf_component_register(
         main.cpp
         adau1966a.cpp
         max98357a.cpp
+        uart_comm.cpp
     PRIV_REQUIRES
         esp_timer
         esp_driver_i2s
         esp_driver_gpio
+        esp_driver_uart
     INCLUDE_DIRS
 )

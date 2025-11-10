@@ -3,7 +3,6 @@
 
 // Components
 #include "adau1966a.hpp"
-#include "max98357a.hpp"
 #include "uart_comm.hpp"
 
 extern "C" {

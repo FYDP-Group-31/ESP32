@@ -2,7 +2,6 @@ idf_component_register(
     SRCS
         main.cpp
         adau1966a.cpp
-        max98357a.cpp
         uart_comm.cpp
     PRIV_REQUIRES
         esp_timer

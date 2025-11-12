@@ -97,6 +97,11 @@ bool UART_Comm::start_thread()
   return true;
 }
 
+void UART_Comm::stop_thread()
+{
+  this->thread_running = false;
+}
+
 
 // Private functions
 void UART_Comm::read_thread_entry(void* pv)

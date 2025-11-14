@@ -49,7 +49,7 @@ bool UART_Comm::init()
   memset(this->rx_buf, 0, 2048);
 
   const uart_config_t uart_cfg = {
-    .baud_rate             = 115200,
+    .baud_rate             = 2000000,
     .data_bits             = UART_DATA_8_BITS,
     .parity                = UART_PARITY_DISABLE,
     .stop_bits             = UART_STOP_BITS_1,
@@ -120,6 +120,10 @@ void UART_Comm::run_read_thread()
     if (n > 0)
     {
       ESP_LOGI(UART_Comm::TAG, "Read %d bytes", n);
+      for (int i = 0; i < n; ++i)
+      {
+        ESP_LOGI(UART_Comm::TAG, "  Byte %d: 0x%02X", i, rx_buf[i]);
+      }
     }
   }
 }
@@ -131,7 +135,7 @@ void UART_Comm::run_write_thread()
   {
     // char msg[64];
     // int n = snprintf(msg, sizeof(msg), "Hello from ESP32-P4 %d\r\n", i++);
-    CommPacket msg = {1,2,3};
+    CommPacket msg = {77,78,79};
     uart_write_bytes(UART_NUM_0, &msg, sizeof(msg));        // queues to TX buffer/FIFO
     ESP_LOGI(UART_Comm::TAG, "Wrote %d bytes", sizeof(msg));
     vTaskDelay(pdMS_TO_TICKS(500));

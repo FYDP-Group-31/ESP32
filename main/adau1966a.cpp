@@ -131,10 +131,12 @@ bool ADAU1966A::init()
 
 void ADAU1966A::deinit()
 {
-    heap_caps_free(this->chunk);
-    this->chunk = nullptr;
+  ESP_ERROR_CHECK(i2s_channel_disable(this->channel));
+  ESP_ERROR_CHECK(i2s_del_channel(this->channel));
+  heap_caps_free(this->chunk);
+  this->chunk = nullptr;
 
-    ESP_ERROR_CHECK(esp_async_memcpy_uninstall(this->async_dma_driver));
+  ESP_ERROR_CHECK(esp_async_memcpy_uninstall(this->async_dma_driver));
 }
 
 bool ADAU1966A::start_thread()

@@ -193,18 +193,21 @@ void UART_Comm::run_read_thread()
 
 void UART_Comm::run_write_thread()
 {
-  // int i = 0;
+  uint8_t seq = 0;
   for (;;)
   {
     CommPacketPing msg = {
       .header = {
-        .addr = MCU_ADDR,
+        .type = REQUEST_PACKET,
+        .addr = RPI5_ADDR,
         .cmd = CMD_PING,
         .len = sizeof(msg) - sizeof(CommPacketHeader)
       },
-      .msg = 0x42
+      .msg = 0x42,
+      .seq = seq
     };
-    uart_write_bytes(UART_NUM_0, &msg, sizeof(msg));        // queues to TX buffer/FIFO
+    uart_write_bytes(UART_NUM_0, &msg, sizeof(msg));
+    seq += 2;
     ESP_LOGI(UART_Comm::TAG, "Wrote %d bytes", sizeof(msg));
     vTaskDelay(pdMS_TO_TICKS(1000));
   }

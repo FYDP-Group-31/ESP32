@@ -7,11 +7,7 @@
 
 #include "gpio_defs.h"
 
-typedef struct __attribute__((packed)) {
-  uint8_t addr;
-  uint8_t cmd;
-  uint16_t len;
-} CommPacket;
+#include "comm_packet.hpp"
 
 class UART_Comm {
   private:

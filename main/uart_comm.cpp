@@ -6,6 +6,16 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
+typedef enum {
+  // STATE_READ_IDLE,
+  STATE_READ_ADDR,
+  STATE_READ_CMD,
+  STATE_READ_LEN,
+  STATE_READ_PAYLOAD,
+  STATE_READ_ERROR,
+  STATE_READ_SIZE
+} UART_Read_State_E;
+
 static std::unique_ptr<UART_Comm> _usb_uart;
 
 bool init_uart()
@@ -114,6 +124,8 @@ void UART_Comm::write_thread_entry(void* pv)
 
 void UART_Comm::run_read_thread()
 {
+  UART_Read_State_E state = STATE_READ_ADDR;
+  uint8_t cmd = CMD_INVALID;
   for (;;)
   {
     int n = uart_read_bytes(UART_NUM_0, rx_buf, 2048, pdMS_TO_TICKS(50));
@@ -122,7 +134,58 @@ void UART_Comm::run_read_thread()
       ESP_LOGI(UART_Comm::TAG, "Read %d bytes", n);
       for (int i = 0; i < n; ++i)
       {
-        ESP_LOGI(UART_Comm::TAG, "  Byte %d: 0x%02X", i, rx_buf[i]);
+        switch (state)
+        {
+          case STATE_READ_ADDR:
+          {
+            if (rx_buf[i] == RPI5_ADDR)
+            {
+              state = STATE_READ_CMD;
+            }
+            break;
+          }
+          case STATE_READ_CMD:
+          {
+            switch (rx_buf[i])
+            {
+              case CMD_PING:
+              {
+                cmd = CMD_PING;
+                state = STATE_READ_LEN;
+                break;
+              }
+              case CMD_AUDIO_DATA:
+              {
+                cmd = CMD_AUDIO_DATA;
+                state = STATE_READ_LEN;
+                break;
+              }
+              default:
+              {
+                state = STATE_READ_ERROR;
+                break;
+              }
+            }
+            break;
+          }
+          case STATE_READ_LEN:
+          {
+            state = STATE_READ_PAYLOAD;
+            break;
+          }
+          case STATE_READ_PAYLOAD:
+          {
+            state = STATE_READ_SIZE;
+            break;
+          }
+          case STATE_READ_ERROR:
+          case STATE_READ_SIZE:
+          default:
+          {
+            state = STATE_READ_ADDR;
+            break;
+          }
+        }
       }
     }
   }
@@ -133,11 +196,16 @@ void UART_Comm::run_write_thread()
   // int i = 0;
   for (;;)
   {
-    // char msg[64];
-    // int n = snprintf(msg, sizeof(msg), "Hello from ESP32-P4 %d\r\n", i++);
-    CommPacket msg = {77,78,79};
+    CommPacketPing msg = {
+      .header = {
+        .addr = MCU_ADDR,
+        .cmd = CMD_PING,
+        .len = sizeof(msg) - sizeof(CommPacketHeader)
+      },
+      .msg = 0x42
+    };
     uart_write_bytes(UART_NUM_0, &msg, sizeof(msg));        // queues to TX buffer/FIFO
     ESP_LOGI(UART_Comm::TAG, "Wrote %d bytes", sizeof(msg));
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }

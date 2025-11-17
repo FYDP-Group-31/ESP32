@@ -9,6 +9,7 @@
 
 #define CMD_PING 0x00
 #define CMD_AUDIO_DATA 0x01
+#define CMD_RESET 0x02
 #define CMD_INVALID 0xFF
 
 typedef struct __attribute__((packed)) {
@@ -31,3 +32,9 @@ typedef struct __attribute__((packed)) {
   uint8_t msg;
   uint8_t seq; // Even number for requests, odd number for responses
 } CommPacketPing;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  uint32_t wait_time_ms;
+  uint8_t crc;
+} CommPacketReset;

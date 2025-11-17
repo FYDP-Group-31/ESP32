@@ -2,6 +2,7 @@ import serial
 import threading
 import time
 import signal
+from enum import Enum
 
 REQUEST_PACKET = 0xAA
 RESPONSE_PACKET = 0x55
@@ -12,6 +13,7 @@ INVALID_ADDR = 0xFF
 
 CMD_PING = 0x00
 CMD_AUDIO_DATA = 0x01
+CMD_RESET = 0x02
 CMD_INVALID = 0xFF
 
 class CommPacketHeader(bytearray):
@@ -20,7 +22,8 @@ class CommPacketHeader(bytearray):
       type,
       addr,
       cmd,
-      length
+      length & 0xFF,
+      (length >> 8) & 0xFF # forces length to be 2 bytes
     ))
 
 class CommPacketPayloadPing(bytearray):
@@ -36,41 +39,95 @@ class CommPacket(bytearray):
     self.extend(CommPacketHeader(REQUEST_PACKET, addr, cmd, len(data)))
     self.extend(data)
 
-write_lock = threading.Lock()
-run_thread = True
+class ReadState(Enum):
+  READ_STATE_IDLE = 0
+  READ_STATE_CHECK_TYPE = 1
+  READ_STATE_CHECK_ADDR = 2
+  READ_STATE_CHECK_CMD = 3
+  READ_STATE_CHECK_LENGTH = 4
+  READ_STATE_READ_PAYLOAD = 5
+  READ_STATE_VERIFY_CRC = 6
+  READ_STATE_HANDLE_ERROR = 7
 
-threads: list[threading.Thread] = []
+class ESP32_Comms:
+  def __init__(self, port: str, baudrate: int):
+    self.ser = serial.Serial(port, baudrate=baudrate, timeout=1)
+    self.ser.reset_output_buffer()
 
-def periodic_ping(ser: serial.Serial):
-  seq = 0
-  while run_thread:
-    pass
-    with write_lock:
-      ping = CommPacket(MCU_ADDR, CMD_PING, CommPacketPayloadPing(0x42, seq))
-      ser.write(ping)
-    time.sleep(1)
+    self.read_state = ReadState.READ_STATE_IDLE
+    self.threads: list[threading.Thread] = [
+      threading.Thread(target=self._serial_read_thread, daemon=False),
+      threading.Thread(target=self._periodic_ping_thread, daemon=False)
+    ]
+    self.write_lock = threading.Lock()
+    self.run_thread = False
 
-def serial_read(ser: serial.Serial):
-  while run_thread:
-    line = ser.read()
-    if line:
-      print(f"({time.time()}){line}")
+  def start_threads(self):
+    self.run_thread = True
+    for t in self.threads:
+      t.start()
 
-def signal_handler(sig, frame):
-  global run_thread
-  run_thread = False
-  for t in threads:
-    t.join()
+  def stop_threads(self):
+    self.run_thread = False
+    for t in self.threads:
+      t.join()
+
+  def _serial_read_thread(self):
+    while self.run_thread:
+      line = self.ser.read_all()
+      if line:
+        for byte in line:
+          match self.read_state:
+            case ReadState.READ_STATE_IDLE:
+              if byte == RESPONSE_PACKET:
+                self.read_state = ReadState.READ_STATE_CHECK_ADDR
+              elif byte == REQUEST_PACKET:
+                self.read_state = ReadState.READ_STATE_CHECK_ADDR
+              else:
+                pass
+            case ReadState.READ_STATE_CHECK_ADDR:
+              if byte == RPI5_ADDR:
+                self.read_state = ReadState.READ_STATE_CHECK_CMD
+              else:
+                self.read_state = ReadState.READ_STATE_IDLE
+            case ReadState.READ_STATE_CHECK_CMD:
+              if byte == CMD_PING:
+                print("Ping")
+                self.read_state = ReadState.READ_STATE_CHECK_LENGTH
+              elif byte == CMD_AUDIO_DATA:
+                print("Audio Data")
+                self.read_state = ReadState.READ_STATE_CHECK_LENGTH
+              elif byte == CMD_RESET:
+                print("Reset")
+                self.read_state = ReadState.READ_STATE_CHECK_LENGTH
+              else:
+                self.read_state = ReadState.READ_STATE_IDLE
+            case ReadState.READ_STATE_CHECK_LENGTH:
+              print(f"Lenth: {byte}")
+              self.read_state = ReadState.READ_STATE_IDLE
+            case _:
+              self.read_state = ReadState.READ_STATE_IDLE
+
+  def _periodic_ping_thread(self):
+    seq = 0
+    while self.run_thread:
+      with self.write_lock:
+        ping = CommPacket(MCU_ADDR, CMD_PING, CommPacketPayloadPing(0x42, seq))
+        print(f"{time.time()} Pinging MCU ({seq})")
+        self.ser.write(ping)
+        seq += 2
+      time.sleep(1)
+  
+  def _signal_handler(self, sig, frame):
+    self.stop_threads()
+
+
 
 def main():
-  signal.signal(signal.SIGINT, signal_handler)
-  ser = serial.Serial("/dev/ttyACM1", baudrate=2_000_000, timeout=1)
-  ser.reset_output_buffer()
+  esp32_comms = ESP32_Comms(port="/dev/ttyACM1", baudrate=2_000_000)
+  signal.signal(signal.SIGINT, esp32_comms._signal_handler)
+  esp32_comms.start_threads()
 
-  threads.append(threading.Thread(target=periodic_ping, args=(ser,), daemon=False))
-  threads.append(threading.Thread(target=serial_read, args=(ser,), daemon=False))
-  for t in threads:
-    t.start()
 
 
 if __name__ == "__main__":

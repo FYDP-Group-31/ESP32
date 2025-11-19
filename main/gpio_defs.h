@@ -7,5 +7,7 @@
 #define I2S_WS_GPIO         GPIO_NUM_3
 #define I2S_DOUT_GPIO       GPIO_NUM_4
 
-#define UART_TX_GPIO        GPIO_NUM_37
-#define UART_RX_GPIO        GPIO_NUM_38
+#define UART0_TX_GPIO        GPIO_NUM_37
+#define UART0_RX_GPIO        GPIO_NUM_38
+#define UART1_TX_GPIO        GPIO_NUM_20
+#define UART1_RX_GPIO        GPIO_NUM_21

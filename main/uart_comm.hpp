@@ -12,15 +12,19 @@
 class UART_Comm {
   private:
     uint8_t* rx_buf;
+    uint8_t* audio_data_buf;
 
     bool thread_running;
-    TaskHandle_t read_task;
+    TaskHandle_t control_data_recv_task;
     TaskHandle_t write_task;
+    TaskHandle_t audio_data_recv_task;
 
-    static void read_thread_entry(void* pv);
+    static void control_data_recv_thread_entry(void* pv);
     static void write_thread_entry(void* pv);
-    void run_read_thread();
+    static void audio_data_recv_thread_entry(void* pv);
+    void run_control_data_recv_thread();
     void run_write_thread();
+    void run_audio_data_recv_thread();
 
   public:
     static constexpr const char* TAG = "UART";

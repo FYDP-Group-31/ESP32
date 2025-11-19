@@ -50,8 +50,8 @@ class ReadState(Enum):
   READ_STATE_HANDLE_ERROR = 7
 
 class ESP32_Comms:
-  def __init__(self, port: str, baudrate: int):
-    self.ser = serial.Serial(port, baudrate=baudrate, timeout=1)
+  def __init__(self, control_port: str, audio_port: str, baudrate: int):
+    self.ser = serial.Serial(control_port, baudrate=baudrate, timeout=1)
     self.ser.reset_output_buffer()
 
     self.read_state = ReadState.READ_STATE_IDLE
@@ -116,15 +116,17 @@ class ESP32_Comms:
         print(f"{time.time()} Pinging MCU ({seq})")
         self.ser.write(ping)
         seq += 2
+        if seq >= 256:
+          seq = 0
       time.sleep(1)
   
-  def _signal_handler(self, sig, frame):
+  def _signal_handler(self, sig, frame) -> None:
     self.stop_threads()
 
 
 
 def main():
-  esp32_comms = ESP32_Comms(port="/dev/ttyACM1", baudrate=2_000_000)
+  esp32_comms = ESP32_Comms(control_port="/dev/ttyAMA0", audio_port="/dev/ttyAMA1", baudrate=2_000_000)
   signal.signal(signal.SIGINT, esp32_comms._signal_handler)
   esp32_comms.start_threads()
 

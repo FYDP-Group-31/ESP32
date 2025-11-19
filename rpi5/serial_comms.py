@@ -51,8 +51,8 @@ class ReadState(Enum):
 
 class ESP32_Comms:
   def __init__(self, control_port: str, audio_port: str, baudrate: int):
-    self.ser = serial.Serial(control_port, baudrate=baudrate, timeout=1)
-    self.ser.reset_output_buffer()
+    self.ser_control = serial.Serial(control_port, baudrate=baudrate, timeout=1)
+    self.ser_control.reset_output_buffer()
 
     self.read_state = ReadState.READ_STATE_IDLE
     self.threads: list[threading.Thread] = [
@@ -74,7 +74,7 @@ class ESP32_Comms:
 
   def _serial_read_thread(self):
     while self.run_thread:
-      line = self.ser.read_all()
+      line = self.ser_control.read_all()
       if line:
         for byte in line:
           match self.read_state:
@@ -114,7 +114,7 @@ class ESP32_Comms:
       with self.write_lock:
         ping = CommPacket(MCU_ADDR, CMD_PING, CommPacketPayloadPing(0x42, seq))
         print(f"{time.time()} Pinging MCU ({seq})")
-        self.ser.write(ping)
+        self.ser_control.write(ping)
         seq += 2
         if seq >= 256:
           seq = 0

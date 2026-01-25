@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
+#include "adau1966a.hpp"
+
 typedef enum {
   // STATE_READ_IDLE,
   STATE_READ_START,
@@ -18,6 +20,7 @@ typedef enum {
 } UART_Read_State_E;
 
 static std::unique_ptr<UART_Comm> _uart;
+static ADAU1966A* dac = nullptr;
 
 bool init_uart()
 {
@@ -53,6 +56,13 @@ UART_Comm::~UART_Comm()
 
 bool UART_Comm::init()
 {
+  dac = &get_adau1966a();
+  if (dac == nullptr)
+  {
+    ESP_LOGE("UART Init", "Failed to get ADAU1966A instance");
+    return false;
+  }
+
   this->control_data_buf = (uint8_t*)heap_caps_malloc(2048, MALLOC_CAP_DMA);
   if (this->control_data_buf == nullptr)
   {
@@ -159,6 +169,7 @@ void UART_Comm::run_control_data_recv_thread()
   CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_INVALID, .len = 0};
   for (;;)
   {
+    // ESP_LOGI("UART0", "sdfjsfhdsjkfds");
     int n = uart_read_bytes(UART_NUM_0, this->control_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
@@ -169,26 +180,26 @@ void UART_Comm::run_control_data_recv_thread()
         {
           case STATE_READ_START:
           {
-            if (control_data_buf[i] == REQUEST_PACKET)
+            if (this->control_data_buf[i] == REQUEST_PACKET)
             {
               header.type = REQUEST_PACKET;
               state = STATE_READ_ADDR;
             }
-            else if (control_data_buf[i] == RESPONSE_PACKET)
+            else if (this->control_data_buf[i] == RESPONSE_PACKET)
             {
               header.type = RESPONSE_PACKET;
               state = STATE_READ_ADDR;
             }
             else
             {
-              ESP_LOGW("UART0", "Invalid packet type received: 0x%02X", control_data_buf[i]);
+              ESP_LOGW("UART0", "Invalid packet type received: 0x%02X", this->control_data_buf[i]);
               state = STATE_READ_ERROR;
             }
             break;
           }
           case STATE_READ_ADDR:
           {
-            if (control_data_buf[i] == MCU_ADDR)
+            if (this->control_data_buf[i] == MCU_ADDR)
             {
               header.addr = MCU_ADDR;
               state = STATE_READ_CMD;
@@ -201,7 +212,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_CMD:
           {
-            switch (control_data_buf[i])
+            switch (this->control_data_buf[i])
             {
               case CMD_PING:
               {
@@ -225,7 +236,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_LEN:
           {
-            len |= (control_data_buf[i] << (8 * len_bytes_read));
+            len |= (this->control_data_buf[i] << (8 * len_bytes_read));
             ++len_bytes_read;
             if (len_bytes_read >= 2)
             {
@@ -244,7 +255,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_PAYLOAD:
           {
-            this->payload_buf[payload_bytes_read] = control_data_buf[i];
+            this->payload_buf[payload_bytes_read] = this->control_data_buf[i];
             ++payload_bytes_read;
             
             if (payload_bytes_read >= len)
@@ -257,6 +268,18 @@ void UART_Comm::run_control_data_recv_thread()
                 \tLen: %d bytes",
                 header.type, header.addr, header.cmd, header.len
               );
+
+              if (header.cmd == CMD_AUDIO_DATA) // TODO: Move audio data to UART1
+              {
+                // Write audio data to DAC ring buffer
+                size_t num_samples = header.len / sizeof(sample_t);
+                sample_t* audio_samples = (sample_t*)this->payload_buf;
+                if (!dac->write_to_ringbuf(audio_samples, num_samples))
+                {
+                  ESP_LOGE("UART0", "Failed to write audio data to DAC ring buffer");
+                }
+              }
+
               send_response(header);
 
               // Reset for next packet
@@ -287,12 +310,47 @@ void UART_Comm::run_control_data_recv_thread()
 
 void UART_Comm::run_audio_data_recv_thread()
 {
+  UART_Read_State_E state = STATE_READ_START;
+  uint16_t len = 0;
+  uint8_t len_bytes_read = 0;
+  uint16_t payload_bytes_read = 0;
+  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_INVALID, .len = 0};
   for (;;)
   {
     int n = uart_read_bytes(UART_NUM_1, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
       ESP_LOGI("UART1", "Audio Data Thread: Read %d bytes", n);
+      switch (state)
+      {
+        case STATE_READ_START:
+        {
+          break;
+        }
+        case STATE_READ_ADDR:
+        {
+          break;
+        }
+        case STATE_READ_CMD:
+        {
+          break;
+        }
+        case STATE_READ_LEN:
+        {
+          break;
+        }
+        case STATE_READ_PAYLOAD:
+        {
+          break;
+        }
+        case STATE_READ_ERROR:
+        case STATE_READ_SIZE:
+        {
+          ESP_LOGE("UART1", "Error in receiving packet, resetting state machine");
+          state = STATE_READ_START;
+          break;
+        }
+      }
     }
   }
 }

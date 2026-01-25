@@ -8,5 +8,6 @@ idf_component_register(
         esp_driver_i2s
         esp_driver_gpio
         esp_driver_uart
+        esp_ringbuf
     INCLUDE_DIRS
 )

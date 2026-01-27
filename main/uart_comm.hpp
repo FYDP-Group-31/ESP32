@@ -7,28 +7,26 @@
 
 #include "gpio_defs.h"
 
-typedef struct __attribute__((packed)) {
-  uint8_t addr;
-  uint8_t cmd;
-  uint16_t len;
-} CommPacket;
+#include "comm_packet.hpp"
 
 class UART_Comm {
   private:
-    uint8_t* rx_buf;
+    uint8_t* control_data_buf;
+    uint8_t* audio_data_buf;
+    uint8_t* payload_buf;
 
     bool thread_running;
-    TaskHandle_t read_task;
-    TaskHandle_t write_task;
+    TaskHandle_t control_data_recv_task;
+    TaskHandle_t audio_data_recv_task;
 
-    static void read_thread_entry(void* pv);
-    static void write_thread_entry(void* pv);
-    void run_read_thread();
-    void run_write_thread();
+    static void control_data_recv_thread_entry(void* pv);
+    static void audio_data_recv_thread_entry(void* pv);
+    void run_control_data_recv_thread();
+    void run_audio_data_recv_thread();
+
+    void send_response(const CommPacketHeader& req_header);
 
   public:
-    static constexpr const char* TAG = "UART";
-
     explicit UART_Comm();
     ~UART_Comm();
 

@@ -383,13 +383,13 @@ void UART_Comm::send_response(const CommPacketHeader& req_header)
     }
   } 
 
-  // int bytes_written = uart_write_bytes(UART_NUM_0, (const char*)&resp_header, sizeof(CommPacketHeader));
-  // if (bytes_written != sizeof(CommPacketHeader))
-  // {
-  //   ESP_LOGE("UART0", "Failed to send response packet");
-  // }
-  // else
-  // {
-  //   ESP_LOGI("UART0", "Sent response packet");
-  // }
+  int bytes_written = uart_write_bytes(UART_NUM_0, (const char*)&resp_header, sizeof(CommPacketHeader));
+  if (bytes_written != sizeof(CommPacketHeader))
+  {
+    ESP_LOGE("UART0", "Failed to send response packet");
+  }
+  else
+  {
+    ESP_LOGI("UART0", "Sent response packet");
+  }
 }

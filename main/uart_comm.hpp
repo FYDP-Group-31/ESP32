@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 
 #include "driver/uart.h"
+#include "driver/gpio.h"
 
 #include "gpio_defs.h"
 
@@ -21,10 +22,13 @@ class UART_Comm {
 
     static void control_data_recv_thread_entry(void* pv);
     static void audio_data_recv_thread_entry(void* pv);
-    void run_control_data_recv_thread();
-    void run_audio_data_recv_thread();
+    void run_control_data_recv_thread(); // UART1
+    void run_audio_data_recv_thread(); // UART0
 
     void send_response(const CommPacketHeader& req_header);
+
+    void signal_uart_full();
+    void signal_uart_empty();
 
   public:
     explicit UART_Comm();

@@ -7,15 +7,17 @@
 #define MCU_ADDR 0x01
 #define INVALID_ADDR 0xFF
 
-#define CMD_PING 0x00
-#define CMD_AUDIO_DATA 0x01
-#define CMD_RESET 0x02
-#define CMD_INVALID 0xFF
+typedef enum : uint8_t {
+    CMD_PING = 0U,
+    CMD_AUDIO_DATA,
+    CMD_RESET,
+    CMD_SIZE
+} Command_E;
 
 typedef struct __attribute__((packed)) {
   uint8_t type;
   uint8_t addr; // Destination address
-  uint8_t cmd;
+  Command_E cmd;
   uint16_t len;
 } CommPacketHeader;
 

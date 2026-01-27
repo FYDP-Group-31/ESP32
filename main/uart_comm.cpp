@@ -63,6 +63,15 @@ bool UART_Comm::init()
     return false;
   }
 
+  gpio_config_t uart_full_signal_gpio_cfg = {
+    .pin_bit_mask = (1ULL << (UART0_FULL_GPIO - 1)),
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE
+  };
+  ESP_ERROR_CHECK(gpio_config(&uart_full_signal_gpio_cfg));
+
   this->control_data_buf = (uint8_t*)heap_caps_malloc(2048, MALLOC_CAP_DMA);
   if (this->control_data_buf == nullptr)
   {
@@ -166,14 +175,14 @@ void UART_Comm::run_control_data_recv_thread()
   uint16_t len = 0;
   uint8_t len_bytes_read = 0;
   uint16_t payload_bytes_read = 0;
-  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_INVALID, .len = 0};
+  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
   for (;;)
   {
     // ESP_LOGI("UART0", "sdfjsfhdsjkfds");
-    int n = uart_read_bytes(UART_NUM_0, this->control_data_buf, 2048, pdMS_TO_TICKS(50));
+    int n = uart_read_bytes(UART_NUM_1, this->control_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
-      ESP_LOGI("UART0", "Read %d bytes", n);
+      ESP_LOGI("UART1", "Read %d bytes", n);
       for (int i = 0; i < n; ++i)
       {
         switch (state)
@@ -192,7 +201,7 @@ void UART_Comm::run_control_data_recv_thread()
             }
             else
             {
-              ESP_LOGW("UART0", "Invalid packet type received: 0x%02X", this->control_data_buf[i]);
+              ESP_LOGW("UART1", "Invalid packet type received: 0x%02X", this->control_data_buf[i]);
               state = STATE_READ_ERROR;
             }
             break;
@@ -221,13 +230,14 @@ void UART_Comm::run_control_data_recv_thread()
                 break;
               }
               case CMD_AUDIO_DATA:
-              {
-                header.cmd = CMD_AUDIO_DATA;
-                state = STATE_READ_LEN;
-                break;
-              }
+              // {
+              //   header.cmd = CMD_AUDIO_DATA;
+              //   state = STATE_READ_LEN;
+              //   break;
+              // }
               default:
               {
+                ESP_LOGE("UART1", "Invalid CMD type 0x%02X", this->control_data_buf[i]);
                 state = STATE_READ_ERROR;
                 break;
               }
@@ -260,7 +270,7 @@ void UART_Comm::run_control_data_recv_thread()
             
             if (payload_bytes_read >= len)
             {
-              ESP_LOGI("UART0",
+              ESP_LOGI("UART1",
                 "Received packet:\n\
                 \tType: 0x%02X\n\
                 \tAddr: 0x%02X\n\
@@ -269,16 +279,16 @@ void UART_Comm::run_control_data_recv_thread()
                 header.type, header.addr, header.cmd, header.len
               );
 
-              if (header.cmd == CMD_AUDIO_DATA) // TODO: Move audio data to UART1
-              {
-                // Write audio data to DAC ring buffer
-                size_t num_samples = header.len / sizeof(sample_t);
-                sample_t* audio_samples = (sample_t*)this->payload_buf;
-                if (!dac->write_to_ringbuf(audio_samples, num_samples))
-                {
-                  ESP_LOGE("UART0", "Failed to write audio data to DAC ring buffer");
-                }
-              }
+              // if (header.cmd == CMD_AUDIO_DATA)
+              // {
+              //   // Write audio data to DAC ring buffer
+              //   size_t num_samples = header.len / sizeof(sample_t);
+              //   sample_t* audio_samples = (sample_t*)this->payload_buf;
+              //   if (!dac->write_to_ringbuf(audio_samples, num_samples))
+              //   {
+              //     ESP_LOGE("UART1", "Failed to write audio data to DAC ring buffer");
+              //   }
+              // }
 
               send_response(header);
 
@@ -294,7 +304,7 @@ void UART_Comm::run_control_data_recv_thread()
           case STATE_READ_SIZE:
           default:
           {
-            ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
+            ESP_LOGE("UART1", "Error in receiving packet, resetting state machine");
             // Reset for next packet
             len = 0;
             len_bytes_read = 0;
@@ -314,13 +324,13 @@ void UART_Comm::run_audio_data_recv_thread()
   uint16_t len = 0;
   uint8_t len_bytes_read = 0;
   uint16_t payload_bytes_read = 0;
-  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_INVALID, .len = 0};
+  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
   for (;;)
   {
-    int n = uart_read_bytes(UART_NUM_1, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
+    int n = uart_read_bytes(UART_NUM_0, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
-      ESP_LOGI("UART1", "Audio Data Thread: Read %d bytes", n);
+      ESP_LOGI("UART0", "Audio Data Thread: Read %d bytes", n);
       switch (state)
       {
         case STATE_READ_START:
@@ -346,7 +356,7 @@ void UART_Comm::run_audio_data_recv_thread()
         case STATE_READ_ERROR:
         case STATE_READ_SIZE:
         {
-          ESP_LOGE("UART1", "Error in receiving packet, resetting state machine");
+          ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
           state = STATE_READ_START;
           break;
         }
@@ -363,33 +373,49 @@ void UART_Comm::send_response(const CommPacketHeader& req_header)
   resp_header.cmd = req_header.cmd;
   resp_header.len = 0;
 
+  bool send_data = false;
+
   switch (req_header.cmd)
   {
     case CMD_PING:
     {
       // Prepare ping response packet
       resp_header.len = sizeof(CommPacketPing) - sizeof(CommPacketHeader);
+      send_data = true;
       break;
     }
     case CMD_AUDIO_DATA:
     {
       // No response needed for audio data
-      return;
+      break;
     }
     default:
     {
-      ESP_LOGW("UART0", "No response defined for command 0x%02X", req_header.cmd);
+      ESP_LOGW("UART1", "No response defined for command 0x%02X", req_header.cmd);
       return;
     }
   } 
+  if (send_data == true)
+  {
+    int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&resp_header, sizeof(CommPacketHeader));
+    if (bytes_written != sizeof(CommPacketHeader))
+    {
+        ESP_LOGE("UART1", "Failed to send response packet");
+    }
+    else
+    {
+        ESP_LOGI("UART1", "Sent response packet");
+    }
+  }
+  return;
+}
 
-  int bytes_written = uart_write_bytes(UART_NUM_0, (const char*)&resp_header, sizeof(CommPacketHeader));
-  if (bytes_written != sizeof(CommPacketHeader))
-  {
-    ESP_LOGE("UART0", "Failed to send response packet");
-  }
-  else
-  {
-    ESP_LOGI("UART0", "Sent response packet");
-  }
+void UART_Comm::signal_uart_full()
+{
+  
+}
+
+void UART_Comm::signal_uart_empty()
+{
+
 }

@@ -126,7 +126,7 @@ class ESP32_Comms:
 
 
 def main():
-  esp32_comms = ESP32_Comms(control_port="/dev/ttyAMA0", audio_port="/dev/ttyAMA1", baudrate=2_000_000)
+  esp32_comms = ESP32_Comms(control_port="/dev/ttyAMA1", audio_port="/dev/ttyAMA0", baudrate=2_000_000)
   signal.signal(signal.SIGINT, esp32_comms._signal_handler)
   esp32_comms.start_threads()
 

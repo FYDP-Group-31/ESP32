@@ -330,35 +330,57 @@ void UART_Comm::run_audio_data_recv_thread()
     int n = uart_read_bytes(UART_NUM_0, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
+      size_t read_index = 0;
+
       ESP_LOGI("UART0", "Audio Data Thread: Read %d bytes", n);
-      switch (state)
+      while (read_index < n)
       {
-        case STATE_READ_START:
+        uint8_t byte = this->audio_data_buf[read_index];
+        ++read_index;
+        switch (state)
         {
-          break;
-        }
-        case STATE_READ_ADDR:
-        {
-          break;
-        }
-        case STATE_READ_CMD:
-        {
-          break;
-        }
-        case STATE_READ_LEN:
-        {
-          break;
-        }
-        case STATE_READ_PAYLOAD:
-        {
-          break;
-        }
-        case STATE_READ_ERROR:
-        case STATE_READ_SIZE:
-        {
-          ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
-          state = STATE_READ_START;
-          break;
+          case STATE_READ_START:
+          {
+            if (byte == REQUEST_PACKET)
+            {
+              state = STATE_READ_ADDR;
+            }
+            break;
+          }
+          case STATE_READ_ADDR:
+          {
+            if (byte == MCU_ADDR)
+            {
+              state = STATE_READ_CMD;
+            }
+            else
+            {
+              state = STATE_READ_START;
+            }
+            break;
+          }
+          case STATE_READ_CMD:
+          {
+            break;
+          }
+          case STATE_READ_LEN:
+          {
+            break;
+          }
+          case STATE_READ_PAYLOAD:
+          {
+            break;
+          }
+          case STATE_READ_ERROR:
+          case STATE_READ_SIZE:
+          default:
+          {
+            ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
+            // Reset state machine
+            state = STATE_READ_START;
+            read_index = n;
+            break;
+          }
         }
       }
     }
@@ -412,10 +434,10 @@ void UART_Comm::send_response(const CommPacketHeader& req_header)
 
 void UART_Comm::signal_uart_full()
 {
-  
+  gpio_set_level(UART0_FULL_GPIO, 0);
 }
 
 void UART_Comm::signal_uart_empty()
 {
-
+  gpio_set_level(UART0_FULL_GPIO, 1);
 }

@@ -186,11 +186,12 @@ void UART_Comm::run_control_data_recv_thread()
       ESP_LOGI("UART1", "Read %d bytes", n);
       for (size_t i = 0; i < n; ++i)
       {
+        uint8_t byte = this->control_data_buf[i];
         switch (state)
         {
           case STATE_READ_START:
           {
-            if (this->control_data_buf[i] == REQUEST_PACKET)
+            if (byte == REQUEST_PACKET)
             {
               header.type = REQUEST_PACKET;
               state = STATE_READ_ADDR;
@@ -199,7 +200,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_ADDR:
           {
-            if (this->control_data_buf[i] == MCU_ADDR)
+            if (byte == MCU_ADDR)
             {
               header.addr = MCU_ADDR;
               state = STATE_READ_CMD;
@@ -212,7 +213,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_CMD:
           {
-            switch (this->control_data_buf[i])
+            switch (byte)
             {
               case CMD_PING:
               {
@@ -230,7 +231,7 @@ void UART_Comm::run_control_data_recv_thread()
               case CMD_RESET: // TODO: Implement
               default:
               {
-                ESP_LOGE("UART1", "Invalid CMD type 0x%02X", this->control_data_buf[i]);
+                ESP_LOGE("UART1", "Invalid CMD type 0x%02X", byte);
                 state = STATE_READ_ERROR;
                 break;
               }
@@ -239,7 +240,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_LEN:
           {
-            len |= (this->control_data_buf[i] << (8 * len_bytes_read));
+            len |= (byte << (8 * len_bytes_read));
             ++len_bytes_read;
             if (len_bytes_read >= 2)
             {
@@ -258,7 +259,7 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_PAYLOAD:
           {
-            this->payload_buf[payload_bytes_read] = this->control_data_buf[i];
+            this->payload_buf[payload_bytes_read] = byte;
             ++payload_bytes_read;
             
             if (payload_bytes_read >= len)
@@ -430,7 +431,7 @@ void UART_Comm::send_response(const CommPacketHeader& req_header)
     case CMD_PING:
     {
       // Prepare ping response packet
-      resp_header.len = sizeof(CommPacketPing) - sizeof(CommPacketHeader);
+      resp_header.len = sizeof(CommPacketPingReq) - sizeof(CommPacketHeader);
       send_data = true;
       break;
     }

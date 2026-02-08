@@ -34,17 +34,38 @@ typedef struct __attribute__((packed)) {
   CommPacketHeader header;
   uint8_t msg;
   uint8_t seq; // Even number for requests, odd number for responses
-} CommPacketPing;
+} CommPacketPingReq;
+
+typedef struct __attribute__((packed)) {
+  uint8_t curr_pos;
+  uint8_t curr_depth;
+} DevStatus_S;
 
 typedef struct __attribute__((packed)) {
   CommPacketHeader header;
+  DevStatus_S status;
+} CommPacketPingRes;
+
+typedef struct __attribute__((packed)) { // RPi -> MCU
+  CommPacketHeader header;
   uint8_t pos;
   uint8_t depth;
-  uint8_t seq;
+  uint8_t seq; // Even
+} CommPacketPosReq;
+
+typedef struct __attribute__((packed)) { // MCU -> RPi
+  CommPacketHeader header;
+  uint8_t pos;
+  uint8_t depth;
+  uint8_t seq; // Request seq + 1 (odd)
 } CommPacketPosRes;
 
 typedef struct __attribute__((packed)) {
   CommPacketHeader header;
   uint32_t wait_time_ms;
-  uint8_t crc;
-} CommPacketReset;
+} CommPacketResetReq;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  uint8_t reset_status;
+} CommPacketResetRes;

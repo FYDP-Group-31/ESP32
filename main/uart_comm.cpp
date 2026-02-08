@@ -68,7 +68,8 @@ bool UART_Comm::init()
     .mode = GPIO_MODE_OUTPUT,
     .pull_up_en = GPIO_PULLUP_ENABLE,
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE
+    .intr_type = GPIO_INTR_DISABLE,
+    .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
   };
   ESP_ERROR_CHECK(gpio_config(&uart_full_signal_gpio_cfg));
 
@@ -183,7 +184,7 @@ void UART_Comm::run_control_data_recv_thread()
     if (n > 0)
     {
       ESP_LOGI("UART1", "Read %d bytes", n);
-      for (int i = 0; i < n; ++i)
+      for (size_t i = 0; i < n; ++i)
       {
         switch (state)
         {
@@ -315,7 +316,6 @@ void UART_Comm::run_control_data_recv_thread()
 void UART_Comm::run_audio_data_recv_thread()
 {
   UART_Read_State_E state = STATE_READ_START;
-  uint16_t len = 0;
   uint8_t len_bytes_read = 0; // Used to track how many length bytes have been read
   uint16_t payload_bytes_read = 0;
   CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
@@ -324,8 +324,6 @@ void UART_Comm::run_audio_data_recv_thread()
     int n = uart_read_bytes(UART_NUM_0, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
     if (n > 0)
     {
-      size_t read_index = 0;
-
       ESP_LOGI("UART0", "Audio Data Thread: Read %d bytes", n);
 
       for (size_t i = 0; i < n; ++i)

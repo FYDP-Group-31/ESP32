@@ -8,9 +8,10 @@
 #define INVALID_ADDR 0xFF
 
 typedef enum : uint8_t {
-    CMD_PING = 0U,
-    CMD_AUDIO_DATA,
-    CMD_RESET,
+    CMD_PING = 0x00U,
+    CMD_AUDIO_DATA = 0x01U,
+    CMD_RESET = 0x02U,
+    CMD_POS = 0x03U,
     CMD_SIZE
 } Command_E;
 
@@ -34,6 +35,13 @@ typedef struct __attribute__((packed)) {
   uint8_t msg;
   uint8_t seq; // Even number for requests, odd number for responses
 } CommPacketPing;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  uint8_t pos;
+  uint8_t depth;
+  uint8_t seq;
+} CommPacketPosRes;
 
 typedef struct __attribute__((packed)) {
   CommPacketHeader header;

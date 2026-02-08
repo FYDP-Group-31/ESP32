@@ -14,6 +14,7 @@ INVALID_ADDR = 0xFF
 CMD_PING = 0x00
 CMD_AUDIO_DATA = 0x01
 CMD_RESET = 0x02
+CMD_POS = 0x03
 CMD_INVALID = 0xFF
 
 class CommPacketHeader(bytearray):

@@ -194,16 +194,6 @@ void UART_Comm::run_control_data_recv_thread()
               header.type = REQUEST_PACKET;
               state = STATE_READ_ADDR;
             }
-            else if (this->control_data_buf[i] == RESPONSE_PACKET)
-            {
-              header.type = RESPONSE_PACKET;
-              state = STATE_READ_ADDR;
-            }
-            else
-            {
-              ESP_LOGW("UART1", "Invalid packet type received: 0x%02X", this->control_data_buf[i]);
-              state = STATE_READ_ERROR;
-            }
             break;
           }
           case STATE_READ_ADDR:
@@ -229,12 +219,14 @@ void UART_Comm::run_control_data_recv_thread()
                 state = STATE_READ_LEN;
                 break;
               }
+              case CMD_POS:
+              {
+                header.cmd = CMD_POS;
+                state = STATE_READ_LEN;
+                break;
+              }
               case CMD_AUDIO_DATA:
-              // {
-              //   header.cmd = CMD_AUDIO_DATA;
-              //   state = STATE_READ_LEN;
-              //   break;
-              // }
+              case CMD_RESET: // TODO: Implement
               default:
               {
                 ESP_LOGE("UART1", "Invalid CMD type 0x%02X", this->control_data_buf[i]);
@@ -310,6 +302,8 @@ void UART_Comm::run_control_data_recv_thread()
             len_bytes_read = 0;
             payload_bytes_read = 0;
             state = STATE_READ_START;
+
+            --i;
             break;
           }
         }
@@ -322,7 +316,7 @@ void UART_Comm::run_audio_data_recv_thread()
 {
   UART_Read_State_E state = STATE_READ_START;
   uint16_t len = 0;
-  uint8_t len_bytes_read = 0;
+  uint8_t len_bytes_read = 0; // Used to track how many length bytes have been read
   uint16_t payload_bytes_read = 0;
   CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
   for (;;)
@@ -333,16 +327,17 @@ void UART_Comm::run_audio_data_recv_thread()
       size_t read_index = 0;
 
       ESP_LOGI("UART0", "Audio Data Thread: Read %d bytes", n);
-      while (read_index < n)
+
+      for (size_t i = 0; i < n; ++i)
       {
-        uint8_t byte = this->audio_data_buf[read_index];
-        ++read_index;
+        uint8_t byte = this->audio_data_buf[i];
         switch (state)
         {
           case STATE_READ_START:
           {
             if (byte == REQUEST_PACKET)
             {
+              header.type = REQUEST_PACKET;
               state = STATE_READ_ADDR;
             }
             break;
@@ -351,6 +346,7 @@ void UART_Comm::run_audio_data_recv_thread()
           {
             if (byte == MCU_ADDR)
             {
+              header.addr = MCU_ADDR;
               state = STATE_READ_CMD;
             }
             else
@@ -361,14 +357,47 @@ void UART_Comm::run_audio_data_recv_thread()
           }
           case STATE_READ_CMD:
           {
+            if (byte == CMD_AUDIO_DATA)
+            {
+              header.cmd = CMD_AUDIO_DATA;
+              state = STATE_READ_LEN;
+            }
+            else
+            {
+              ESP_LOGE("UART0", "Invalid CMD type 0x%02X", byte);
+              state = STATE_READ_ERROR;
+            }
             break;
           }
           case STATE_READ_LEN:
           {
+            header.len |= (byte << (8 * len_bytes_read));
+            ++len_bytes_read;
+            if (len_bytes_read == 2)
+            {
+              len_bytes_read = 0;
+              if (header.len == 0)
+              {
+                state = STATE_READ_ERROR;
+              }
+              else
+              {
+                state = STATE_READ_PAYLOAD;
+              }
+            }
             break;
           }
           case STATE_READ_PAYLOAD:
           {
+            if (payload_bytes_read == header.len)
+            {
+              payload_bytes_read = 0;
+              state = STATE_READ_START;
+            }
+            else
+            {
+              ++payload_bytes_read;
+            }
             break;
           }
           case STATE_READ_ERROR:
@@ -377,8 +406,9 @@ void UART_Comm::run_audio_data_recv_thread()
           {
             ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
             // Reset state machine
+            memset(&header, 0, sizeof(CommPacketHeader));
             state = STATE_READ_START;
-            read_index = n;
+            --i;
             break;
           }
         }
@@ -405,6 +435,11 @@ void UART_Comm::send_response(const CommPacketHeader& req_header)
       resp_header.len = sizeof(CommPacketPing) - sizeof(CommPacketHeader);
       send_data = true;
       break;
+    }
+    case CMD_POS:
+    {
+      resp_header.len = sizeof(CommPacketPosRes) - sizeof(CommPacketHeader);
+      send_data = true;
     }
     case CMD_AUDIO_DATA:
     {

@@ -13,7 +13,6 @@
 #include "gpio_defs.h"
 #include "audio_defs.h"
 
-
 class ADAU1966A {
   private:
     gpio_num_t mclk_gpio;
@@ -36,7 +35,8 @@ class ADAU1966A {
 
     // Buffer to store frame data required for delay filter
     // Ringbuffer items are copied to this buffer before applying delay filter
-    sample_t* filter_buf;
+    sample_t* sliding_window_buf;
+    size_t sliding_window_idx[TDM_SLOTS];
 
     // Buffer to store individual channel frames in contiguous memory
     // Frames are moved to channel_frame_buf after applying delay filter

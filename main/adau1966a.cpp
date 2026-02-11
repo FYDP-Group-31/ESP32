@@ -46,7 +46,8 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
   async_dma_driver(nullptr),
   uart_ringbuf_driver(nullptr),
   channel_delay_offset(nullptr),
-  filter_buf(nullptr),
+  sliding_window_buf(nullptr),
+  sliding_window_idx{0},
   channel_frame_buf(nullptr),
   chunk(nullptr),
   thread_running(false),
@@ -62,7 +63,7 @@ ADAU1966A::~ADAU1966A()
 
 bool ADAU1966A::init()
 {
-  this->filter_buf = (sample_t*)heap_caps_malloc(sizeof(sample_t) * 256, MALLOC_CAP_DMA);
+  this->sliding_window_buf = (sample_t*)heap_caps_malloc(sizeof(sample_t) * 1024, MALLOC_CAP_DMA);
 
   this->channel_frame_buf = (sample_t**)heap_caps_malloc(TDM_SLOTS * sizeof(sample_t*), MALLOC_CAP_8BIT);
   for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
@@ -179,8 +180,8 @@ void ADAU1966A::deinit()
   heap_caps_free(this->channel_frame_buf);
   this->channel_frame_buf = nullptr;
 
-  heap_caps_free(this->filter_buf);
-  this->filter_buf = nullptr;
+  heap_caps_free(this->sliding_window_buf);
+  this->sliding_window_buf = nullptr;
 
   ESP_ERROR_CHECK(esp_async_memcpy_uninstall(this->async_dma_driver));
 }

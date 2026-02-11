@@ -243,8 +243,13 @@ void UART_Comm::run_control_data_recv_thread()
                 state = STATE_READ_LEN;
                 break;
               }
+              case CMD_RESET:
+              {
+                header.cmd = CMD_RESET;
+                state = STATE_READ_LEN;
+                break;
+              }
               case CMD_AUDIO_DATA:
-              case CMD_RESET: // TODO: Implement
               default:
               {
                 ESP_LOGE("UART1", "Invalid CMD type 0x%02X", byte);
@@ -332,9 +337,9 @@ void UART_Comm::run_control_data_recv_thread()
                   response_header.len = sizeof(CommPacketPosRes) - sizeof(CommPacketHeader);
                   CommPacketPosRes response = {
                     .header = response_header,
-                    .pos = this->curr_pos, // TODO: Get actual position from sensors
-                    .depth = this->curr_depth, // TODO: Get actual depth from sensors
-                    .seq = static_cast<uint8_t>(request.seq + 1) // TODO: Implement sequence numbers for request-response matching
+                    .pos = this->curr_pos,
+                    .depth = this->curr_depth,
+                    .seq = static_cast<uint8_t>(request.seq + 1)
                   };
                   int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
                   if (bytes_written != sizeof(CommPacketHeader))

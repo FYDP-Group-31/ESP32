@@ -1,35 +1,32 @@
 #pragma once
 
-#define REQUEST_PACKET 0xAA
-#define RESPONSE_PACKET 0x55
-
-#define RPI5_ADDR 0x00
-#define MCU_ADDR 0x01
-#define INVALID_ADDR 0xFF
+typedef enum : uint8_t {
+  REQUEST_PACKET = 0xAAU,
+  RESPONSE_PACKET = 0x55U,
+  INVALID_PACKET = 0xFFU
+} PacketType_E;
 
 typedef enum : uint8_t {
-    CMD_PING = 0x00U,
-    CMD_AUDIO_DATA = 0x01U,
-    CMD_RESET = 0x02U,
-    CMD_POS = 0x03U,
-    CMD_SIZE
+    RPI5_ADDR = 0x00U,
+    MCU_ADDR = 0x01U,
+    NUM_ADDR
+} DeviceAddress_E;
+
+typedef enum : uint8_t {
+  CMD_PING = 0x00U,
+  CMD_AUDIO_DATA = 0x01U,
+  CMD_RESET = 0x02U,
+  CMD_POS = 0x03U,
+  CMD_SIZE
 } Command_E;
 
 typedef struct __attribute__((packed)) {
-  uint8_t type;
-  uint8_t addr; // Destination address
+  PacketType_E type;
+  DeviceAddress_E addr; // Destination address
   Command_E cmd;
-  uint16_t len;
+  uint8_t len;
 } CommPacketHeader;
 
-typedef struct __attribute__((packed)) {
-  CommPacketHeader header;
-  uint16_t samples[256];
-} CommPacketAudioData;
-
-/**
- * Ping: RPi5 sends ping requests, MCU responds with ping responses
- */
 typedef struct __attribute__((packed)) {
   CommPacketHeader header;
   uint8_t msg;
@@ -37,13 +34,10 @@ typedef struct __attribute__((packed)) {
 } CommPacketPingReq;
 
 typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
   uint8_t curr_pos;
   uint8_t curr_depth;
-} DevStatus_S;
-
-typedef struct __attribute__((packed)) {
-  CommPacketHeader header;
-  DevStatus_S status;
+  uint8_t seq; // Request seq + 1 (odd number)
 } CommPacketPingRes;
 
 typedef struct __attribute__((packed)) { // RPi -> MCU

@@ -22,6 +22,13 @@ typedef enum {
 static std::unique_ptr<UART_Comm> _uart;
 static ADAU1966A* dac = nullptr;
 
+static void restart_task(void* arg)
+{
+  uint32_t delay_ms = *reinterpret_cast<uint32_t*>(arg);
+  vTaskDelay(pdMS_TO_TICKS(delay_ms));
+  esp_restart();
+}
+
 bool init_uart()
 {
   if (_uart != NULL)
@@ -41,7 +48,10 @@ UART_Comm& get_uart()
 UART_Comm::UART_Comm()
 : control_data_buf(nullptr),
   audio_data_buf(nullptr),
-  payload_buf(nullptr),
+  control_payload_buf(nullptr),
+  audio_payload_buf(nullptr),
+  curr_pos(0),
+  curr_depth(0),
   thread_running(false),
   control_data_recv_task(nullptr),
   audio_data_recv_task(nullptr)
@@ -89,13 +99,21 @@ bool UART_Comm::init()
   }
   memset(this->audio_data_buf, 0, 2048);
 
-  this->payload_buf = (uint8_t*)heap_caps_malloc(2048, MALLOC_CAP_DMA);
-  if (this->payload_buf == nullptr)
+  this->control_payload_buf = (uint8_t*)heap_caps_malloc(256, MALLOC_CAP_DMA);
+  if (this->control_payload_buf == nullptr)
   {
-    ESP_LOGE("UART0", "Could not allocate 2048 bytes of DMA memory");
+    ESP_LOGE("UART0", "Could not allocate 256 bytes of DMA memory");
     return false;
   }
-  memset(this->payload_buf, 0, 2048);
+  memset(this->control_payload_buf, 0, 256);
+
+  this->audio_payload_buf = (uint8_t*)heap_caps_malloc(256, MALLOC_CAP_DMA);
+  if (this->audio_payload_buf == nullptr)
+  {
+    ESP_LOGE("UART0", "Could not allocate 256 bytes of DMA memory");
+    return false;
+  }
+  memset(this->audio_payload_buf, 0, 256);
 
   const uart_config_t uart_cfg = {
     .baud_rate             = 2000000,
@@ -173,10 +191,8 @@ void UART_Comm::audio_data_recv_thread_entry(void* pv)
 void UART_Comm::run_control_data_recv_thread()
 {
   UART_Read_State_E state = STATE_READ_START;
-  uint16_t len = 0;
-  uint8_t len_bytes_read = 0;
-  uint16_t payload_bytes_read = 0;
-  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
+  uint8_t payload_bytes_read = 0;
+  CommPacketHeader header = {.type = INVALID_PACKET, .addr = NUM_ADDR, .cmd = CMD_SIZE, .len = 0};
   for (;;)
   {
     // ESP_LOGI("UART0", "sdfjsfhdsjkfds");
@@ -240,29 +256,23 @@ void UART_Comm::run_control_data_recv_thread()
           }
           case STATE_READ_LEN:
           {
-            len |= (byte << (8 * len_bytes_read));
-            ++len_bytes_read;
-            if (len_bytes_read >= 2)
+            header.len = byte;
+            if (header.len == 0)
             {
-              len_bytes_read = 0;
-              if (len == 0)
-              {
-                state = STATE_READ_ERROR;
-              }
-              else
-              {
-                header.len = len;
-                state = STATE_READ_PAYLOAD;
-              }
+              state = STATE_READ_ERROR;
+            }
+            else
+            {
+              state = STATE_READ_PAYLOAD;
             }
             break;
           }
           case STATE_READ_PAYLOAD:
           {
-            this->payload_buf[payload_bytes_read] = byte;
+            this->control_payload_buf[payload_bytes_read] = byte;
             ++payload_bytes_read;
             
-            if (payload_bytes_read >= len)
+            if (payload_bytes_read >= header.len)
             {
               ESP_LOGI("UART1",
                 "Received packet:\n\
@@ -273,22 +283,109 @@ void UART_Comm::run_control_data_recv_thread()
                 header.type, header.addr, header.cmd, header.len
               );
 
-              // if (header.cmd == CMD_AUDIO_DATA)
-              // {
-              //   // Write audio data to DAC ring buffer
-              //   size_t num_samples = header.len / sizeof(sample_t);
-              //   sample_t* audio_samples = (sample_t*)this->payload_buf;
-              //   if (!dac->write_to_ringbuf(audio_samples, num_samples))
-              //   {
-              //     ESP_LOGE("UART1", "Failed to write audio data to DAC ring buffer");
-              //   }
-              // }
+              CommPacketHeader response_header = {
+                .type = RESPONSE_PACKET,
+                .addr = RPI5_ADDR,
+                .cmd = header.cmd,
+                .len = 0
+              };
 
-              send_response(header);
+              switch (header.cmd)
+              {
+                case CMD_PING:
+                {
+                  CommPacketPingReq request = {
+                    .header = header,
+                    .msg = this->control_payload_buf[0],
+                    .seq = this->control_payload_buf[1]
+                  };
+                  
+                  response_header.len = sizeof(CommPacketPingRes) - sizeof(CommPacketHeader);
+                  CommPacketPingRes response = {
+                    .header = response_header,
+                    .curr_pos = this->curr_pos,
+                    .curr_depth = this->curr_depth,
+                    .seq = static_cast<uint8_t>(request.seq + 1)
+                  };
+                  int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
+                  if (bytes_written != sizeof(CommPacketHeader))
+                  {
+                    ESP_LOGE("UART1", "Failed to send ping response packet");
+                  }
+                  else
+                  {
+                    ESP_LOGI("UART1", "Sent ping response packet");
+                  }
+                  break;
+                }
+                case CMD_POS:
+                {
+                  CommPacketPosReq request = {
+                    .header = header,
+                    .pos = this->control_payload_buf[0],
+                    .depth = this->control_payload_buf[1],
+                    .seq = this->control_payload_buf[2]
+                  };
+
+                  this->curr_pos = request.pos;
+                  this->curr_depth = request.depth;
+                  response_header.len = sizeof(CommPacketPosRes) - sizeof(CommPacketHeader);
+                  CommPacketPosRes response = {
+                    .header = response_header,
+                    .pos = this->curr_pos, // TODO: Get actual position from sensors
+                    .depth = this->curr_depth, // TODO: Get actual depth from sensors
+                    .seq = static_cast<uint8_t>(request.seq + 1) // TODO: Implement sequence numbers for request-response matching
+                  };
+                  int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
+                  if (bytes_written != sizeof(CommPacketHeader))
+                  {
+                    ESP_LOGE("UART1", "Failed to send position response packet");
+                  }
+                  else
+                  {
+                    ESP_LOGI("UART1", "Sent position response packet");
+                  }
+                  break;
+                }
+                case CMD_RESET:
+                {
+                  CommPacketResetReq request = {
+                    .header = header,
+                    .wait_time_ms = (static_cast<uint32_t>(this->control_payload_buf[0]) << 24) |
+                                   (static_cast<uint32_t>(this->control_payload_buf[1]) << 16) |
+                                   (static_cast<uint32_t>(this->control_payload_buf[2]) << 8) |
+                                   (static_cast<uint32_t>(this->control_payload_buf[3]))
+                  };
+
+                  response_header.len = sizeof(CommPacketResetRes) - sizeof(CommPacketHeader);
+                  CommPacketResetRes response = {
+                    .header = response_header,
+                    .reset_status = 0 // TODO: Define reset status codes
+                  };
+                  int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
+                  if (bytes_written != sizeof(CommPacketHeader))
+                  {
+                    ESP_LOGE("UART1", "Failed to send reset response packet");
+                  }
+                  else      {
+                    ESP_LOGI("UART1", "Sent reset response packet");
+                  }
+                  xTaskCreatePinnedToCore(&restart_task, "RestartTask", 64, (void*)request.wait_time_ms, 3, nullptr, tskNO_AFFINITY);
+                  break;
+                }
+                case CMD_AUDIO_DATA:
+                default:
+                {
+                  ESP_LOGW("UART1", "No response defined for command 0x%02X", header.cmd);
+                  break;
+                }
+              }
 
               // Reset for next packet
-              len = 0;
-              len_bytes_read = 0;
+              header.type = INVALID_PACKET;
+              header.cmd = CMD_SIZE;
+              header.addr = NUM_ADDR;
+              header.len = 0;
               payload_bytes_read = 0;
               state = STATE_READ_START;
             }
@@ -300,8 +397,10 @@ void UART_Comm::run_control_data_recv_thread()
           {
             ESP_LOGE("UART1", "Error in receiving packet, resetting state machine");
             // Reset for next packet
-            len = 0;
-            len_bytes_read = 0;
+            header.type = INVALID_PACKET;
+            header.cmd = CMD_SIZE;
+            header.addr = NUM_ADDR;
+            header.len = 0;
             payload_bytes_read = 0;
             state = STATE_READ_START;
 
@@ -317,9 +416,8 @@ void UART_Comm::run_control_data_recv_thread()
 void UART_Comm::run_audio_data_recv_thread()
 {
   UART_Read_State_E state = STATE_READ_START;
-  uint8_t len_bytes_read = 0; // Used to track how many length bytes have been read
-  uint16_t payload_bytes_read = 0;
-  CommPacketHeader header = {.type = 0, .addr = 0, .cmd = CMD_SIZE, .len = 0};
+  uint8_t payload_bytes_read = 0;
+  CommPacketHeader header = {.type = INVALID_PACKET, .addr = NUM_ADDR, .cmd = CMD_SIZE, .len = 0};
   for (;;)
   {
     int n = uart_read_bytes(UART_NUM_0, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
@@ -370,32 +468,46 @@ void UART_Comm::run_audio_data_recv_thread()
           }
           case STATE_READ_LEN:
           {
-            header.len |= (byte << (8 * len_bytes_read));
-            ++len_bytes_read;
-            if (len_bytes_read == 2)
+            header.len = byte;
+            if (header.len == 0)
             {
-              len_bytes_read = 0;
-              if (header.len == 0)
-              {
-                state = STATE_READ_ERROR;
-              }
-              else
-              {
-                state = STATE_READ_PAYLOAD;
-              }
+              state = STATE_READ_ERROR;
+            }
+            else
+            {
+              state = STATE_READ_PAYLOAD;
             }
             break;
           }
           case STATE_READ_PAYLOAD:
           {
-            if (payload_bytes_read == header.len)
+            this->audio_payload_buf[payload_bytes_read] = byte;
+            ++payload_bytes_read;
+            if (payload_bytes_read >= header.len)
             {
+              ESP_LOGI("UART0",
+                "Received audio packet:\n\
+                \tType: 0x%02X\n\
+                \tAddr: 0x%02X\n\
+                \tCmd: 0x%02X\n\
+                \tLen: %d bytes",
+                header.type, header.addr, header.cmd, header.len
+              );
+
+              // Write audio data to DAC ring buffer
+              size_t num_samples = header.len / sizeof(sample_t);
+              if (!dac->write_to_ringbuf((sample_t*)this->audio_payload_buf, num_samples))
+              {
+                ESP_LOGE("UART0", "Failed to write audio data to DAC ring buffer");
+              }
+
+              // Reset for next packet
+              header.type = INVALID_PACKET;
+              header.cmd = CMD_SIZE;
+              header.addr = NUM_ADDR;
+              header.len = 0;
               payload_bytes_read = 0;
               state = STATE_READ_START;
-            }
-            else
-            {
-              ++payload_bytes_read;
             }
             break;
           }
@@ -405,7 +517,11 @@ void UART_Comm::run_audio_data_recv_thread()
           {
             ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
             // Reset state machine
-            memset(&header, 0, sizeof(CommPacketHeader));
+            header.type = INVALID_PACKET;
+            header.cmd = CMD_SIZE;
+            header.addr = NUM_ADDR;
+            header.len = 0;
+            payload_bytes_read = 0;
             state = STATE_READ_START;
             --i;
             break;
@@ -414,56 +530,6 @@ void UART_Comm::run_audio_data_recv_thread()
       }
     }
   }
-}
-
-void UART_Comm::send_response(const CommPacketHeader& req_header)
-{
-  CommPacketHeader resp_header;
-  resp_header.type = RESPONSE_PACKET;
-  resp_header.addr = RPI5_ADDR;
-  resp_header.cmd = req_header.cmd;
-  resp_header.len = 0;
-
-  bool send_data = false;
-
-  switch (req_header.cmd)
-  {
-    case CMD_PING:
-    {
-      // Prepare ping response packet
-      resp_header.len = sizeof(CommPacketPingReq) - sizeof(CommPacketHeader);
-      send_data = true;
-      break;
-    }
-    case CMD_POS:
-    {
-      resp_header.len = sizeof(CommPacketPosRes) - sizeof(CommPacketHeader);
-      send_data = true;
-    }
-    case CMD_AUDIO_DATA:
-    {
-      // No response needed for audio data
-      break;
-    }
-    default:
-    {
-      ESP_LOGW("UART1", "No response defined for command 0x%02X", req_header.cmd);
-      return;
-    }
-  } 
-  if (send_data == true)
-  {
-    int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&resp_header, sizeof(CommPacketHeader));
-    if (bytes_written != sizeof(CommPacketHeader))
-    {
-        ESP_LOGE("UART1", "Failed to send response packet");
-    }
-    else
-    {
-        ESP_LOGI("UART1", "Sent response packet");
-    }
-  }
-  return;
 }
 
 void UART_Comm::signal_uart_full()

@@ -14,7 +14,11 @@ class UART_Comm {
   private:
     uint8_t* control_data_buf;
     uint8_t* audio_data_buf;
-    uint8_t* payload_buf;
+    uint8_t* control_payload_buf;
+    uint8_t* audio_payload_buf;
+
+    uint8_t curr_pos;
+    uint8_t curr_depth;
 
     bool thread_running;
     TaskHandle_t control_data_recv_task;
@@ -24,8 +28,6 @@ class UART_Comm {
     static void audio_data_recv_thread_entry(void* pv);
     void run_control_data_recv_thread(); // UART1
     void run_audio_data_recv_thread(); // UART0
-
-    void send_response(const CommPacketHeader& req_header);
 
     void signal_uart_full();
     void signal_uart_empty();

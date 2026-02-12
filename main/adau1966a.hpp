@@ -22,13 +22,6 @@ class ADAU1966A {
 
     // ********** DRIVER HANDLES **********
     i2s_chan_handle_t i2s_driver;
-    async_memcpy_handle_t async_dma_driver;
-    // UART controller writes to this buffer when new audio data is received
-    RingbufHandle_t uart_ringbuf_driver; // TODO: Combine ringbuf with filter_buf (reduce redundancy)
-
-    // Stores the offset of each channel to track integer delay offsets
-    size_t* channel_delay_offset;
-
     // ********** INTERNAL BUFFERS **********
     // NOTE: Delay calculations should be done between chunks
     // NOTE: Multiple chunks may be needed to satisfy delay requirements
@@ -36,7 +29,11 @@ class ADAU1966A {
     // Buffer to store frame data required for delay filter
     // Ringbuffer items are copied to this buffer before applying delay filter
     sample_t* sliding_window_buf;
-    size_t sliding_window_idx[TDM_SLOTS];
+    size_t sliding_window_read_idx; // Global read index for channels with 0 phase offset
+    size_t sliding_window_write_idx; // Index of the next sample to write in sliding window buffer
+    size_t sliding_window_channel_idx[TDM_SLOTS];
+    size_t sliding_window_remaining_size;
+    int32_t channel_delay_offset[TDM_SLOTS];
 
     // Buffer to store individual channel frames in contiguous memory
     // Frames are moved to channel_frame_buf after applying delay filter
@@ -73,11 +70,11 @@ class ADAU1966A {
     bool start_thread();
     void stop_thread();
 
-    size_t read_ringbuf(size_t num_samples, sample_t* out_buf);
+    size_t read_ringbuf(size_t num_samples, int32_t offset, sample_t* out_buf);
     bool write_to_ringbuf(const sample_t* data, size_t num_samples);
     size_t get_ringbuf_free_size();
 
-    void set_channel_integer_delay_offset(uint8_t channel, size_t offset);
+    void set_channel_integer_delay_offset(uint8_t channel, int32_t offset);
 };
 
 bool init_adau1966a(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_gpio, gpio_num_t data_gpio);

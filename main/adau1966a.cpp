@@ -7,16 +7,20 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_dsp.h"
+#include "driver/gpio.h"
 
 #define DEBUG 0
 
 #define BITS_PER_SAMPLE I2S_DATA_BIT_WIDTH_16BIT
 
-inline constexpr size_t BYTES_PER_TDM_FRAME = (TDM_SLOTS * sizeof(sample_t));
-inline constexpr size_t FRAMES_PER_I2S_CHUNK = 256;
-inline constexpr size_t BYTES_PER_I2S_CHUNK = FRAMES_PER_I2S_CHUNK * BYTES_PER_TDM_FRAME;
+static inline constexpr size_t BYTES_PER_TDM_FRAME = (TDM_SLOTS * sizeof(sample_t));
+static inline constexpr size_t FRAMES_PER_I2S_CHUNK = 256;
+static inline constexpr size_t BYTES_PER_I2S_CHUNK = FRAMES_PER_I2S_CHUNK * BYTES_PER_TDM_FRAME;
 
-inline constexpr i2s_tdm_slot_mask_t SLOT_MASK_TDM16 = static_cast<i2s_tdm_slot_mask_t>((1U << TDM_SLOTS) - 1U);
+// Stores 2 seconds of 16-bit mono (single-channel) audio data at 48kHz
+static inline constexpr size_t audio_buf_size = sizeof(sample_t) * SAMPLE_RATE * 2;
+
+static inline constexpr i2s_tdm_slot_mask_t SLOT_MASK_TDM16 = static_cast<i2s_tdm_slot_mask_t>((1U << TDM_SLOTS) - 1U);
 
 static std::unique_ptr<ADAU1966A> _adau1966a;
 
@@ -43,11 +47,12 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
   ws_gpio(ws_gpio),
   data_gpio(data_gpio),
   i2s_driver(nullptr),
-  async_dma_driver(nullptr),
-  uart_ringbuf_driver(nullptr),
-  channel_delay_offset(nullptr),
   sliding_window_buf(nullptr),
-  sliding_window_idx{0},
+  sliding_window_read_idx(0),
+  sliding_window_write_idx(0),
+  sliding_window_channel_idx{0},
+  sliding_window_remaining_size(0),
+  channel_delay_offset{0},
   channel_frame_buf(nullptr),
   chunk(nullptr),
   thread_running(false),
@@ -63,12 +68,19 @@ ADAU1966A::~ADAU1966A()
 
 bool ADAU1966A::init()
 {
-  this->sliding_window_buf = (sample_t*)heap_caps_malloc(sizeof(sample_t) * 1024, MALLOC_CAP_DMA);
+  this->sliding_window_buf = (sample_t*)heap_caps_malloc(
+    audio_buf_size,
+    MALLOC_CAP_DMA | MALLOC_CAP_SIMD
+  );
+  this->sliding_window_remaining_size = audio_buf_size / sizeof(sample_t);
 
   this->channel_frame_buf = (sample_t**)heap_caps_malloc(TDM_SLOTS * sizeof(sample_t*), MALLOC_CAP_8BIT);
   for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
   {
-    this->channel_frame_buf[channel] = (sample_t*)heap_caps_malloc(FRAMES_PER_I2S_CHUNK * sizeof(sample_t), MALLOC_CAP_DMA);
+    this->channel_frame_buf[channel] = (sample_t*)heap_caps_malloc(
+      FRAMES_PER_I2S_CHUNK * sizeof(sample_t),
+      MALLOC_CAP_DMA | MALLOC_CAP_SIMD
+    );
     if (this->channel_frame_buf[channel] == nullptr)
     {
       ESP_LOGE(ADAU1966A::TAG, "Could not allocate %d bytes of DMA memory for channel %d", FRAMES_PER_I2S_CHUNK * sizeof(sample_t), channel);
@@ -85,31 +97,15 @@ bool ADAU1966A::init()
   }
   memset(this->chunk, 0, BYTES_PER_I2S_CHUNK);
 
-  async_memcpy_config_t async_dma_config = {
-    .backlog = 16U,
-    .sram_trans_align = 0U,
-    .dma_burst_size = BYTES_PER_TDM_FRAME,
-    .flags = 0U
+  gpio_config_t uart_full_signal_gpio_cfg = {
+    .pin_bit_mask = (1ULL << (AUDIO_BUF_FULL_GPIO - 1)),
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+    .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
   };
-  ESP_ERROR_CHECK(esp_async_memcpy_install(&async_dma_config, &this->async_dma_driver));
-
-  this->channel_delay_offset = (size_t*)heap_caps_malloc(TDM_SLOTS * sizeof(size_t), MALLOC_CAP_8BIT);
-  if (this->channel_delay_offset == nullptr)
-  {
-    ESP_LOGE(ADAU1966A::TAG, "Could not allocate %d bytes of memory for channel offsets", TDM_SLOTS * sizeof(size_t));
-    return false;
-  }
-  for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
-  {
-    this->channel_delay_offset[channel] = 0U;
-  }
-
-  const size_t audio_buf_size = sizeof(sample_t) * SAMPLE_RATE * 2; // Stores 2 seconds of 16-bit mono (single-channel) audio data at 48kHz
-  this->uart_ringbuf_driver = xRingbufferCreate(audio_buf_size, RINGBUF_TYPE_BYTEBUF);
-  if (this->uart_ringbuf_driver == NULL) {
-    ESP_LOGE(ADAU1966A::TAG, "Failed to create ring buffer");
-    return false;
-  }
+  ESP_ERROR_CHECK(gpio_config(&uart_full_signal_gpio_cfg));
 
   i2s_chan_config_t i2s_cfg = {
     .id = I2S_NUM_0, // Make argument??
@@ -170,8 +166,6 @@ void ADAU1966A::deinit()
   ESP_ERROR_CHECK(i2s_del_channel(this->i2s_driver));
   heap_caps_free(this->chunk);
   this->chunk = nullptr;
-  heap_caps_free(this->channel_delay_offset);
-  this->channel_delay_offset = nullptr;
 
   for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
   {
@@ -182,8 +176,6 @@ void ADAU1966A::deinit()
 
   heap_caps_free(this->sliding_window_buf);
   this->sliding_window_buf = nullptr;
-
-  ESP_ERROR_CHECK(esp_async_memcpy_uninstall(this->async_dma_driver));
 }
 
 bool ADAU1966A::start_thread()
@@ -234,7 +226,7 @@ void ADAU1966A::run_thread()
       break;
     }
 
-    // TODO: Use async memcpy to write to chunk
+    // TODO: Use read_ringbuf() for each channel to read required samples for delay filter, apply delay filter, and store result in channel_frame[channel_num]
     for (size_t frame_num = 0U; frame_num < FRAMES_PER_I2S_CHUNK; ++frame_num)
     {
       for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
@@ -268,16 +260,60 @@ void ADAU1966A::run_thread()
 
 bool ADAU1966A::write_to_ringbuf(const sample_t* data, size_t num_samples)
 {
-  if (this->uart_ringbuf_driver == NULL) {
-    ESP_LOGE(ADAU1966A::TAG, "Ring buffer not initialized");
+  if (this->sliding_window_buf == nullptr)
+  {
+    ESP_LOGE(ADAU1966A::TAG, "Sliding window buffer not initialized");
     return false;
   }
 
-  size_t bytes_to_write = num_samples * sizeof(sample_t);
-  size_t bytes_written = xRingbufferSend(this->uart_ringbuf_driver, (void*)data, bytes_to_write, pdMS_TO_TICKS(100));
-  if (bytes_written != bytes_to_write) {
-    ESP_LOGW(ADAU1966A::TAG, "Failed to write all data to ring buffer. Expected %d bytes, wrote %d bytes", bytes_to_write, bytes_written);
+  if (this->sliding_window_remaining_size < num_samples)
+  {
+    ESP_LOGW(ADAU1966A::TAG, "Not enough space in sliding window buffer to write data. Remaining size: %d samples, data size: %d samples", this->sliding_window_remaining_size, num_samples);
     return false;
+  }
+
+  size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
+
+  if (this->sliding_window_write_idx + num_samples > buffer_capacity)
+  {
+    // Need to split: data wraps around to the beginning of the buffer
+    size_t first_part_samples = buffer_capacity - this->sliding_window_write_idx;
+    size_t second_part_samples = num_samples - first_part_samples;
+    
+    // Copy first part to end of buffer
+    memcpy(
+      this->sliding_window_buf + this->sliding_window_write_idx, 
+      data, 
+      first_part_samples * sizeof(sample_t)
+    );
+    
+    // Copy second part to start of buffer
+    memcpy(
+      this->sliding_window_buf, 
+      data + first_part_samples, 
+      second_part_samples * sizeof(sample_t)
+    );
+    
+    this->sliding_window_write_idx = second_part_samples;
+  }
+  else
+  {
+    // No wrap around, single copy
+    memcpy(
+      this->sliding_window_buf + this->sliding_window_write_idx, 
+      data, 
+      num_samples * sizeof(sample_t)
+    );
+    
+    this->sliding_window_write_idx += num_samples;
+  }
+
+  this->sliding_window_remaining_size -= num_samples;
+
+  // If remaining size is less than 25% of buffer capacity, signal to RPi to stop writing more data
+  if (this->get_ringbuf_free_size() < (audio_buf_size / sizeof(sample_t)) / 4)
+  {
+    this->signal_ringbuf_full();
   }
 
   return true;
@@ -285,49 +321,78 @@ bool ADAU1966A::write_to_ringbuf(const sample_t* data, size_t num_samples)
 
 size_t ADAU1966A::get_ringbuf_free_size()
 {
-  if (this->uart_ringbuf_driver == nullptr) {
-    ESP_LOGE(ADAU1966A::TAG, "Ring buffer not initialized. Returned 0 for size.");
-    return 0;
-  }
-
-  return xRingbufferGetCurFreeSize(this->uart_ringbuf_driver);
+  return this->sliding_window_remaining_size;
 }
 
 void ADAU1966A::signal_ringbuf_full()
 {
-  // Signal to RPi that ring buffer is full or almost full
-  // Use single wire GPIO or UART message
+  gpio_set_level(AUDIO_BUF_FULL_GPIO, 0);
 }
 
 void ADAU1966A::signal_ringbuf_ready()
 {
-  // Signal to RPi that ring buffer has enough space to write more data
-  // Use single wire GPIO or UART message
+  gpio_set_level(AUDIO_BUF_FULL_GPIO, 1);
 }
 
-size_t ADAU1966A::read_ringbuf(size_t num_samples, sample_t* out_buf)
+size_t ADAU1966A::read_ringbuf(size_t num_samples, int32_t offset, sample_t* out_buf)
 {
-  if (this->uart_ringbuf_driver == nullptr) {
-    ESP_LOGE(ADAU1966A::TAG, "Ring buffer not initialized");
+  if (this->sliding_window_buf == nullptr) {
+    ESP_LOGE(ADAU1966A::TAG, "Sliding window buffer not initialized");
     return 0;
   }
 
-  size_t bytes_to_read = num_samples * sizeof(sample_t);
-  size_t bytes_read = 0;
-  void* item = xRingbufferReceiveUpTo(this->uart_ringbuf_driver, &bytes_read, pdMS_TO_TICKS(100), bytes_to_read);
-  if (item == NULL || bytes_read == 0) {
-    ESP_LOGW(ADAU1966A::TAG, "No data available in ring buffer to read");
+  size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
+  size_t samples_written = buffer_capacity - this->sliding_window_remaining_size;
+
+  // Check if offset + num_samples exceeds available data
+  if (offset + num_samples > samples_written) {
+    ESP_LOGW(ADAU1966A::TAG, "Not enough data in buffer. Requested: %d samples at offset %d, Available: %d", num_samples, offset, samples_written);
+    if (offset >= samples_written) {
+      return 0; // Offset is beyond available data
+    }
+    num_samples = samples_written - offset; // Read what's available from offset
+  }
+
+  if (num_samples == 0) {
+    ESP_LOGE(ADAU1966A::TAG, "Read of size 0 requested from ring buffer");
     return 0;
   }
 
-  memcpy(out_buf, item, bytes_read);
-  vRingbufferReturnItem(this->uart_ringbuf_driver, item);
+  // Calculate read start index (offset from sliding_window_read_idx)
+  size_t read_start_idx = (this->sliding_window_read_idx + offset + buffer_capacity) % buffer_capacity;
 
-  return bytes_read / sizeof(sample_t); // Should be equivalent to dividing by 2 (16-bit samples)
+  if (read_start_idx + num_samples > buffer_capacity) {
+    // Read wraps around the buffer boundary
+    size_t first_part_samples = buffer_capacity - read_start_idx;
+    size_t second_part_samples = num_samples - first_part_samples;
+
+    // Copy first part from end of buffer
+    memcpy(
+      out_buf, 
+      this->sliding_window_buf + read_start_idx, 
+      first_part_samples * sizeof(sample_t)
+    );
+
+    // Copy second part from start of buffer
+    memcpy(
+      out_buf + first_part_samples, 
+      this->sliding_window_buf, 
+      second_part_samples * sizeof(sample_t)
+    );
+  } else {
+    // Single contiguous read
+    memcpy(
+      out_buf, 
+      this->sliding_window_buf + read_start_idx, 
+      num_samples * sizeof(sample_t)
+    );
+  }
+
+  return num_samples;
 }
 
 // Sets integer number of samples to delay channel output
-void ADAU1966A::set_channel_integer_delay_offset(uint8_t channel, size_t offset)
+void ADAU1966A::set_channel_integer_delay_offset(uint8_t channel, int32_t offset)
 {
   if (channel >= TDM_SLOTS) {
     ESP_LOGE(ADAU1966A::TAG, "Invalid channel number %d for delay offset", channel);

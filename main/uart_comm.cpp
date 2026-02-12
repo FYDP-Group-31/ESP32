@@ -73,16 +73,6 @@ bool UART_Comm::init()
     return false;
   }
 
-  gpio_config_t uart_full_signal_gpio_cfg = {
-    .pin_bit_mask = (1ULL << (UART0_FULL_GPIO - 1)),
-    .mode = GPIO_MODE_OUTPUT,
-    .pull_up_en = GPIO_PULLUP_ENABLE,
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE,
-    .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
-  };
-  ESP_ERROR_CHECK(gpio_config(&uart_full_signal_gpio_cfg));
-
   this->control_data_buf = (uint8_t*)heap_caps_malloc(2048, MALLOC_CAP_DMA);
   if (this->control_data_buf == nullptr)
   {
@@ -535,14 +525,4 @@ void UART_Comm::run_audio_data_recv_thread()
       }
     }
   }
-}
-
-void UART_Comm::signal_uart_full()
-{
-  gpio_set_level(UART0_FULL_GPIO, 0);
-}
-
-void UART_Comm::signal_uart_empty()
-{
-  gpio_set_level(UART0_FULL_GPIO, 1);
 }

@@ -410,118 +410,66 @@ void UART_Comm::run_control_data_recv_thread()
 
 void UART_Comm::run_audio_data_recv_thread()
 {
-  UART_Read_State_E state = STATE_READ_START;
-  uint8_t payload_bytes_read = 0;
-  CommPacketHeader header = {.type = INVALID_PACKET, .addr = NUM_ADDR, .cmd = CMD_SIZE, .len = 0};
+  constexpr size_t PACKET_SIZE = sizeof(CommPacketAudioData);
+  constexpr size_t PAYLOAD_SIZE = sizeof(CommPacketAudioData) - sizeof(CommPacketHeader);
+  constexpr size_t NUM_SAMPLES = PAYLOAD_SIZE / sizeof(sample_t);
+  
+  size_t bytes_needed = PACKET_SIZE;
+  size_t bytes_in_buffer = 0;
+  uint8_t* packet_buf = this->audio_data_buf;  // Use first 260 bytes for current packet
+
+  size_t frame_count = 0;
+  
   for (;;)
   {
-    int n = uart_read_bytes(UART_NUM_0, this->audio_data_buf, 2048, pdMS_TO_TICKS(50));
+    // Read exactly the bytes we need to complete the packet
+    int n = uart_read_bytes(UART_NUM_0, packet_buf + bytes_in_buffer, bytes_needed, pdMS_TO_TICKS(50));
+    
     if (n > 0)
     {
-      ESP_LOGI("UART0", "Audio Data Thread: Read %d bytes", n);
-
-      for (size_t i = 0; i < n; ++i)
+      bytes_in_buffer += n;
+      bytes_needed -= n;
+      
+      // Check if we have a complete packet
+      if (bytes_needed == 0)
       {
-        uint8_t byte = this->audio_data_buf[i];
-        switch (state)
+        // Validate header
+        if (
+          packet_buf[0] == REQUEST_PACKET && 
+          packet_buf[1] == MCU_ADDR && 
+          packet_buf[2] == CMD_AUDIO_DATA && 
+          packet_buf[3] == NUM_SAMPLES
+        )
         {
-          case STATE_READ_START:
+          ++frame_count;
+          // Convert samples from network order (big-endian) to host order
+          sample_t* samples = (sample_t*)(packet_buf + 4);
+          for (size_t i = 0; i < NUM_SAMPLES; ++i)
           {
-            if (byte == REQUEST_PACKET)
-            {
-              header.type = REQUEST_PACKET;
-              state = STATE_READ_ADDR;
-            }
-            break;
+            samples[i] = __builtin_bswap16(samples[i]);
           }
-          case STATE_READ_ADDR:
+          
+          // Write audio data to DAC ring buffer
+          if (!dac->write_to_ringbuf(samples, NUM_SAMPLES))
           {
-            if (byte == MCU_ADDR)
-            {
-              header.addr = MCU_ADDR;
-              state = STATE_READ_CMD;
-            }
-            else
-            {
-              state = STATE_READ_START;
-            }
-            break;
+            ESP_LOGW("UART0", "Failed to write audio data to DAC ring buffer");
           }
-          case STATE_READ_CMD:
+          else
           {
-            if (byte == CMD_AUDIO_DATA)
-            {
-              header.cmd = CMD_AUDIO_DATA;
-              state = STATE_READ_LEN;
-            }
-            else
-            {
-              ESP_LOGE("UART0", "Invalid CMD type 0x%02X", byte);
-              state = STATE_READ_ERROR;
-            }
-            break;
-          }
-          case STATE_READ_LEN:
-          {
-            header.len = byte;
-            if (header.len == 0)
-            {
-              state = STATE_READ_ERROR;
-            }
-            else
-            {
-              state = STATE_READ_PAYLOAD;
-            }
-            break;
-          }
-          case STATE_READ_PAYLOAD:
-          {
-            this->audio_payload_buf[payload_bytes_read] = byte;
-            ++payload_bytes_read;
-            if (payload_bytes_read >= header.len)
-            {
-              ESP_LOGI("UART0",
-                "Received audio packet:\n\
-                \tType: 0x%02X\n\
-                \tAddr: 0x%02X\n\
-                \tCmd: 0x%02X\n\
-                \tLen: %d bytes",
-                header.type, header.addr, header.cmd, header.len
-              );
-
-              // Write audio data to DAC ring buffer
-              size_t num_samples = header.len / sizeof(sample_t);
-              if (!dac->write_to_ringbuf((sample_t*)this->audio_payload_buf, num_samples))
-              {
-                ESP_LOGE("UART0", "Failed to write audio data to DAC ring buffer");
-              }
-
-              // Reset for next packet
-              header.type = INVALID_PACKET;
-              header.cmd = CMD_SIZE;
-              header.addr = NUM_ADDR;
-              header.len = 0;
-              payload_bytes_read = 0;
-              state = STATE_READ_START;
-            }
-            break;
-          }
-          case STATE_READ_ERROR:
-          case STATE_READ_SIZE:
-          default:
-          {
-            ESP_LOGE("UART0", "Error in receiving packet, resetting state machine");
-            // Reset state machine
-            header.type = INVALID_PACKET;
-            header.cmd = CMD_SIZE;
-            header.addr = NUM_ADDR;
-            header.len = 0;
-            payload_bytes_read = 0;
-            state = STATE_READ_START;
-            --i;
-            break;
+            ESP_LOGI("UART0", "Wrote %d samples to DAC ring buffer (%d)", NUM_SAMPLES, frame_count);
           }
         }
+        else
+        {
+          ESP_LOGE(
+            "UART0", "Invalid packet header: [0x%02X, 0x%02X, 0x%02X, 0x%02X]",
+            packet_buf[0], packet_buf[1], packet_buf[2], packet_buf[3]
+          );
+        }
+        
+        // Reset for next packet
+        bytes_in_buffer = 0;
+        bytes_needed = PACKET_SIZE;
       }
     }
   }

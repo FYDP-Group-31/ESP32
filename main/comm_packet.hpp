@@ -1,5 +1,7 @@
 #pragma once
 
+#include "audio_defs.h"
+
 typedef enum : uint8_t {
   REQUEST_PACKET = 0xAAU,
   RESPONSE_PACKET = 0x55U,
@@ -39,6 +41,11 @@ typedef struct __attribute__((packed)) {
   uint8_t curr_depth;
   uint8_t seq; // Request seq + 1 (odd number)
 } CommPacketPingRes;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  sample_t audio_data[128];
+} CommPacketAudioData;
 
 typedef struct __attribute__((packed)) { // RPi -> MCU
   CommPacketHeader header;

@@ -444,10 +444,6 @@ void UART_Comm::run_audio_data_recv_thread()
           ++frame_count;
           // Convert samples from network order (big-endian) to host order
           sample_t* samples = (sample_t*)(packet_buf + 4);
-          for (size_t i = 0; i < NUM_SAMPLES; ++i)
-          {
-            samples[i] = __builtin_bswap16(samples[i]);
-          }
           
           // Write audio data to DAC ring buffer
           if (!dac->write_to_ringbuf(samples, NUM_SAMPLES))

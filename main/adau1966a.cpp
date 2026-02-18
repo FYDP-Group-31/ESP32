@@ -172,7 +172,7 @@ bool ADAU1966A::init()
       .slot_mask = SLOT_MASK_TDM16,
       .ws_width = I2S_TDM_AUTO_WS_WIDTH,
       .ws_pol = false,
-      .bit_shift = false,
+      .bit_shift = true,
       .left_align = false,
       .big_endian = false,
       .bit_order_lsb = false,

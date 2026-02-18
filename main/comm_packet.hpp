@@ -1,6 +1,6 @@
 #pragma once
 
-#include "audio_defs.h"
+#include "audio_defs.hpp"
 
 typedef enum : uint8_t {
   REQUEST_PACKET = 0xAAU,

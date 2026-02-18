@@ -11,6 +11,9 @@
 // GPIO_NUM_6
 #define DAC_RST_GPIO         GPIO_NUM_22
 
+#define DAC_I2C_SCL_GPIO     GPIO_NUM_8
+#define DAC_I2C_SDA_GPIO     GPIO_NUM_7
+
 #define UART0_TX_GPIO        GPIO_NUM_37
 #define UART0_RX_GPIO        GPIO_NUM_38
 #define UART1_TX_GPIO        GPIO_NUM_20

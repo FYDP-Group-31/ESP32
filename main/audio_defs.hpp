@@ -1,0 +1,271 @@
+#pragma once
+
+#define SAMPLE_RATE 48000
+#define TDM_SLOTS 16
+
+typedef int16_t sample_t;
+
+#define DAC_I2C_ADDR 0x64
+#define DAC_I2C_FREQ_HZ 400000
+
+
+#define PLL_CLK_CTRL0_REG       0x00
+#define PLL_CLK_CTRL1_REG       0x01
+#define PDN_THRMSENS_CTRL1_REG  0x02
+#define PDN_CTRL2_REG           0x03
+#define PDN_CTRL3_REG           0x04
+#define THRM_TEMP_STAT_REG      0x05
+#define DAC_CTRL0_REG           0x06
+#define DAC_CTRL1_REG           0x07
+#define DAC_CTRL2_REG           0x08
+#define DAC_MUTE1_REG           0x09
+#define DAC_MUTE2_REG           0x0A
+#define DACMSTR_VOL_REG         0x0B
+#define DAC01_VOL_REG           0x0C
+#define DAC02_VOL_REG           0x0D
+#define DAC03_VOL_REG           0x0E
+#define DAC04_VOL_REG           0x0F
+#define DAC05_VOL_REG           0x10
+#define DAC06_VOL_REG           0x11
+#define DAC07_VOL_REG           0x12
+#define DAC08_VOL_REG           0x13
+#define DAC09_VOL_REG           0x14
+#define DAC10_VOL_REG           0x15
+#define DAC11_VOL_REG           0x16
+#define DAC12_VOL_REG           0x17
+#define DAC13_VOL_REG           0x18
+#define DAC14_VOL_REG           0x19
+#define DAC15_VOL_REG           0x1A
+#define DAC16_VOL_REG           0x1B
+#define DAC_POWER2_REG          0x1E
+#define DAC_POWER3_REG          0x1F
+#define DAC_POWER4_REG          0x20
+
+// PLL AND CLOCK CONTROL 0 REGISTER (0x00)
+// [7 : 6] RW
+#define PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI (0b00 << 6)
+#define PLL_CLK_CTRL0_PLLIN_DLRCLK       (0b01 << 6)
+
+// [5 : 4] RW
+#define PLL_CLK_CTRL0_XTAL_SET_ENABLE (0b00 << 4)
+#define PLL_CLK_CTRL0_XTAL_SET_OFF    (0b11 << 4)
+
+// [3] RW
+#define PLL_CLK_CTRL0_SOFT_RST_NORMAL (0b0 << 3)
+#define PLL_CLK_CTRL0_SOFT_RST_RESET  (0b1 << 3)
+
+// [2 : 1] RW
+#define PLL_CLK_CTRL0_MCS_256 (0b00 << 1)
+#define PLL_CLK_CTRL0_MCS_384 (0b01 << 1)
+#define PLL_CLK_CTRL0_MCS_512 (0b10 << 1)
+#define PLL_CLK_CTRL0_MCS_768 (0b11 << 1)
+
+// [0] RW
+#define PLL_CLK_CTRL0_PUP_POWER_DOWN (0b0 << 0)
+#define PLL_CLK_CTRL0_PUP_POWER_UP   (0b1 << 0)
+
+// PLL AND CLOCK CONTROL 1 REGISTER (0x01)
+// [7 : 6] RW
+#define PLL_CLK_CTRL1_LOWPWR_MODE_I2C    (0b00 << 6)
+#define PLL_CLK_CTRL1_LOWPWR_MODE_LOWER  (0b10 << 6)
+#define PLL_CLK_CTRL1_LOWPWR_MODE_LOWEST (0b11 << 6)
+
+// [5 : 4] RW
+#define PLL_CLK_CTRL1_MCLKO_SEL_4_6_MHZ_FS     (0b00 << 4)
+#define PLL_CLK_CTRL1_MCLKO_SEL_8_12_MHZ_FS    (0b01 << 4)
+#define PLL_CLK_CTRL1_MCLKO_SEL_BUFFERED_MCLKI (0b10 << 4)
+#define PLL_CLK_CTRL1_MCLKO_SEL_DISABLED       (0b11 << 4)
+
+// [3] RW
+#define PLL_CLK_CTRL1_PLL_MUTE_NO_AUTOMUTE            (0b0 << 3)
+#define PLL_CLK_CTRL1_PLL_MUTE_AUTOMUTE_ON_PLL_UNLOCK (0b1 << 3)
+
+// [2] R
+#define PLL_CLK_CTRL1_PLL_LOCK_NOT_LOCKED (0b0 << 2)
+#define PLL_CLK_CTRL1_PLL_LOCK_LOCKED     (0b1 << 2)
+
+// [1] RW
+#define PLL_CLK_CTRL1_VREF_EN_DISABLED (0b0 << 1)
+#define PLL_CLK_CTRL1_VREF_EN_ENABLED  (0b1 << 1)
+
+// [0] RW
+#define PLL_CLK_CTRL1_CLK_SEL_PLL   (0b0 << 0)
+#define PLL_CLK_CTRL1_CLK_SEL_MCLKI (0b1 << 0)
+
+// BLOCK POWER-DOWN AND THERMAL SENSOR CONTROL 1 REGISTER (0x02)
+// [7 : 6] RW
+#define PDN_THRMSENS_CTRL1_THRM_RATE_4S_CONVERSION   (0b00 << 6)
+#define PDN_THRMSENS_CTRL1_THRM_RATE_0_5S_CONVERSION (0b01 << 6)
+#define PDN_THRMSENS_CTRL1_THRM_RATE_1S_CONVERSION   (0b10 << 6)
+#define PDN_THRMSENS_CTRL1_THRM_RATE_2S_CONVERSION   (0b11 << 6)
+
+// [5] RW
+#define PDN_THRMSENS_CTRL1_THRM_MODE_CONTINUOUS (0b0 << 5)
+#define PDN_THRMSENS_CTRL1_THRM_MODE_ONE_SHOT   (0b1 << 5)
+
+// [4] RW
+#define PDN_THRMSENS_CTRL1_THRM_GO_RESET        (0b0 << 4)
+#define PDN_THRMSENS_CTRL1_THRM_GO_CONVERT_TEMP (0b1 << 4)
+
+// [3] Reserved
+
+// [2] RW
+#define PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_ON         (0b0 << 2)
+#define PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_POWER_DOWN (0b1 << 2)
+
+// [1] RW
+#define PDN_THRMSENS_CTRL1_PLL_PDN_NORMAL_OPERATION (0b0 << 1)
+#define PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN       (0b1 << 1)
+
+// [0] RW
+#define PDN_THRMSENS_CTRL1_VREG_PDN_NORMAL_OPERATION (0b0 << 0)
+#define PDN_THRMSENS_CTRL1_VREG_PDN_POWER_DOWN       (0b1 << 0)
+
+// POWER-DOWN CONTROL 2 REGISTER (0x03)
+// [7] RW
+#define PDN_CTRL2_DAC08_PDN_NORMAL_OPERATION (0b0 << 7)
+#define PDN_CTRL2_DAC08_PDN_POWER_DOWN       (0b1 << 7)
+
+// [6] RW
+#define PDN_CTRL2_DAC07_PDN_NORMAL_OPERATION (0b0 << 6)
+#define PDN_CTRL2_DAC07_PDN_POWER_DOWN       (0b1 << 6)
+
+// [5] RW
+#define PDN_CTRL2_DAC06_PDN_NORMAL_OPERATION (0b0 << 5)
+#define PDN_CTRL2_DAC06_PDN_POWER_DOWN       (0b1 << 5)
+
+// [4] RW
+#define PDN_CTRL2_DAC05_PDN_NORMAL_OPERATION (0b0 << 4)
+#define PDN_CTRL2_DAC05_PDN_POWER_DOWN       (0b1 << 4)
+
+// [3] RW
+#define PDN_CTRL2_DAC04_PDN_NORMAL_OPERATION (0b0 << 3)
+#define PDN_CTRL2_DAC04_PDN_POWER_DOWN       (0b1 << 3)
+
+// [2] RW
+#define PDN_CTRL2_DAC03_PDN_NORMAL_OPERATION (0b0 << 2)
+#define PDN_CTRL2_DAC03_PDN_POWER_DOWN       (0b1 << 2)
+
+// [1] RW
+#define PDN_CTRL2_DAC02_PDN_NORMAL_OPERATION (0b0 << 1)
+#define PDN_CTRL2_DAC02_PDN_POWER_DOWN       (0b1 << 1)
+
+// [0] RW
+#define PDN_CTRL2_DAC01_PDN_NORMAL_OPERATION (0b0 << 0)
+#define PDN_CTRL2_DAC01_PDN_POWER_DOWN       (0b1 << 0)
+
+// POWER-DOWN CONTROL 3 REGISTER (0x04)
+// [7] RW
+#define PDN_CTRL3_DAC16_PDN_NORMAL_OPERATION (0b0 << 7)
+#define PDN_CTRL3_DAC16_PDN_POWER_DOWN       (0b1 << 7)
+
+// [6] RW
+#define PDN_CTRL3_DAC15_PDN_NORMAL_OPERATION (0b0 << 6)
+#define PDN_CTRL3_DAC15_PDN_POWER_DOWN       (0b1 << 6)
+
+// [5] RW
+#define PDN_CTRL3_DAC14_PDN_NORMAL_OPERATION (0b0 << 5)
+#define PDN_CTRL3_DAC14_PDN_POWER_DOWN       (0b1 << 5)
+
+// [4] RW
+#define PDN_CTRL3_DAC13_PDN_NORMAL_OPERATION (0b0 << 4)
+#define PDN_CTRL3_DAC13_PDN_POWER_DOWN       (0b1 << 4)
+
+// [3] RW
+#define PDN_CTRL3_DAC12_PDN_NORMAL_OPERATION (0b0 << 3)
+#define PDN_CTRL3_DAC12_PDN_POWER_DOWN       (0b1 << 3)
+
+// [2] RW
+#define PDN_CTRL3_DAC11_PDN_NORMAL_OPERATION (0b0 << 2)
+#define PDN_CTRL3_DAC11_PDN_POWER_DOWN       (0b1 << 2)
+
+// [1] RW
+#define PDN_CTRL3_DAC10_PDN_NORMAL_OPERATION (0b0 << 1)
+#define PDN_CTRL3_DAC10_PDN_POWER_DOWN       (0b1 << 1)
+
+// [0] RW
+#define PDN_CTRL3_DAC09_PDN_NORMAL_OPERATION (0b0 << 0)
+#define PDN_CTRL3_DAC09_PDN_POWER_DOWN       (0b1 << 0)
+
+// THERMAL SENSOR TEMPERATURE READOUT REGISTER (0x05)
+// [7 : 0] R
+#define THRM_TEMP_STAT_TEMP_MASK (0b11111111)
+
+// DAC CONTROL 0 REGISTER (0x06)
+// [7 : 6] RW
+// Only used when SAI (bits [5:3]) is set to 000
+#define DAC_CTRL0_SDATA_FMT_I2S_1_BCLK_CYCLE_DELAY                          (0b00 << 6)
+#define DAC_CTRL0_SDATA_FMT_LEFT_JUSTIFIED_0_DELAY                          (0b01 << 6)
+#define DAC_CTRL0_SDATA_FMT_RIGHT_JUSTIFIED_24_BIT_DATA_8_BCLK_CYCLE_DELAY  (0b10 << 6)
+#define DAC_CTRL0_SDATA_FMT_RIGHT_JUSTIFIED_16_BIT_DATA_16_BCLK_CYCLE_DELAY (0b11 << 6)
+
+// [5 : 3] RW
+#define DAC_CTRL0_SAI_MODE_STEREO       (0b000 << 3)
+#define DAC_CTRL0_SAI_MODE_TDM2_OCTAL   (0b001 << 3)
+#define DAC_CTRL0_SAI_MODE_TDM4_QUAD    (0b010 << 3)
+#define DAC_CTRL0_SAI_MODE_TDM8_DUAL    (0b011 << 3)
+#define DAC_CTRL0_SAI_MODE_TDM16_SINGLE (0b100 << 3)
+
+// [2 : 1] RW
+#define DAC_CTRL0_FS_32_44_1_48_KHZ                   (0b00 << 1)
+#define DAC_CTRL0_FS_64_88_2_96_KHZ                   (0b01 << 1)
+#define DAC_CTRL0_FS_128_176_4_192_KHZ                (0b10 << 1)
+#define DAC_CTRL0_FS_128_176_4_192_KHZ_LOW_PROP_DELAY (0b11 << 1)
+
+// [0] RW
+#define DAC_CTRL0_MMUTE_NORMAL_OPERATION (0b0 << 0)
+#define DAC_CTRL0_MMUTE_GLOBAL_MUTE      (0b1 << 0)
+
+// DAC CONTROL 1 REGISTER (0x07)
+// [7] RW
+#define DAC_CTRL1_BCLK_GEN_NORMAL_OPERATION (0b0 << 7)
+#define DAC_CTRL1_BCLK_GEN_INTERNAL_DBCLK   (0b1 << 7)
+
+// [6] RW
+#define DAC_CTRL1_LRCLK_MODE_50_PERCENT_DUTY_CYCLE (0b0 << 6)
+#define DAC_CTRL1_LRCLK_MODE_PULSE_MODE            (0b1 << 6)
+
+// [5] RW
+#define DAC_CTRL1_LRCLK_POL_NORMAL   (0b0 << 5)
+#define DAC_CTRL1_LRCLK_POL_INVERTED (0b1 << 5)
+
+// [4] RW
+#define DAC_CTRL1_SAI_MSB_MSB_FIRST (0b0 << 4)
+#define DAC_CTRL1_SAI_MSB_LSB_FIRST (0b1 << 4)
+
+// [3] Reserved
+
+// [2] RW
+#define DAC_CTRL1_BCLK_RATE_32_PER_FRAME (0b0 << 3)
+#define DAC_CTRL1_BCLK_RATE_16_PER_FRAME (0b1 << 3)
+
+// [1] RW
+#define DAC_CTRL1_BCLK_EDGE_LATCH_RISING_EDGE  (0b0 << 1)
+#define DAC_CTRL1_BCLK_EDGE_LATCH_FALLING_EDGE (0b1 << 1)
+
+// [0] RW
+#define DAC_CTRL1_SAI_MS_SLAVE  (0b0 << 0)
+#define DAC_CTRL1_SAI_MS_MASTER (0b1 << 0)
+
+// DAC CONTROL 2 REGISTER (0x08)
+// [7 : 5] Reserved
+
+// [4] RW
+#define DAC_CTRL2_BCLK_TDMC_32_CYCLES_PER_SLOT (0b0 << 4)
+#define DAC_CTRL2_BCLK_TDMC_16_CYCLES_PER_SLOT (0b1 << 4)
+
+// [3] RW
+#define DAC_CTRL2_DAC_POL_NONINVERTED (0b0 << 3)
+#define DAC_CTRL2_DAC_POL_INVERTED    (0b1 << 3)
+
+// [2] RW
+#define DAC_CTRL2_AUTO_MUTE_EN_DISABLED (0b0 << 2)
+#define DAC_CTRL2_AUTO_MUTE_EN_ENABLED  (0b1 << 2)
+
+// [1] RW
+#define DAC_CTRL2_DAC_OSR_256_FS (0b0 << 1)
+#define DAC_CTRL2_DAC_OSR_128_FS (0b1 << 1)
+
+// [0] RW
+#define DAC_CTRL2_DE_EMP_EN_DISABLED (0b0 << 0)
+#define DAC_CTRL2_DE_EMP_EN_ENABLED  (0b1 << 0)

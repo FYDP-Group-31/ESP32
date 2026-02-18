@@ -2,16 +2,16 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/ringbuf.h"
 
 #include "driver/i2s_tdm.h"
 #include "driver/i2s_types.h"
 #include "driver/i2s_common.h"
+#include "driver/i2c_master.h"
 
 #include "esp_async_memcpy.h"
 
 #include "gpio_defs.h"
-#include "audio_defs.h"
+#include "audio_defs.hpp"
 
 class ADAU1966A {
   private:
@@ -22,6 +22,8 @@ class ADAU1966A {
 
     // ********** DRIVER HANDLES **********
     i2s_chan_handle_t i2s_driver;
+    i2c_master_bus_handle_t bus_handle;
+    i2c_master_dev_handle_t dev_handle;
     // ********** INTERNAL BUFFERS **********
     // NOTE: Delay calculations should be done between chunks
     // NOTE: Multiple chunks may be needed to satisfy delay requirements
@@ -53,6 +55,8 @@ class ADAU1966A {
     void run_thread();
     void signal_ringbuf_full();
     void signal_ringbuf_ready();
+
+    void setup_dac();
 
   public:
     static constexpr const char* TAG = "ADAU1966A";

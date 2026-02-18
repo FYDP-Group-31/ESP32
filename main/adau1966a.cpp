@@ -47,6 +47,8 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
   ws_gpio(ws_gpio),
   data_gpio(data_gpio),
   i2s_driver(nullptr),
+  bus_handle(nullptr),
+  dev_handle(nullptr),
   sliding_window_buf(nullptr),
   sliding_window_read_idx(0),
   sliding_window_write_idx(0),
@@ -98,7 +100,7 @@ bool ADAU1966A::init()
   memset(this->chunk, 0, BYTES_PER_I2S_CHUNK);
 
   gpio_config_t uart_full_signal_gpio_cfg = {
-    .pin_bit_mask = (1ULL << (AUDIO_BUF_FULL_GPIO - 1)),
+    .pin_bit_mask = (1ULL << AUDIO_BUF_FULL_GPIO),
     .mode = GPIO_MODE_OUTPUT,
     .pull_up_en = GPIO_PULLUP_ENABLE,
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -106,6 +108,42 @@ bool ADAU1966A::init()
     .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
   };
   ESP_ERROR_CHECK(gpio_config(&uart_full_signal_gpio_cfg));
+
+  gpio_config_t dac_rst_gpio_cfg = {
+    .pin_bit_mask = (1ULL << DAC_RST_GPIO),
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_ENABLE,
+    .intr_type = GPIO_INTR_DISABLE,
+    .hys_ctrl_mode = GPIO_HYS_SOFT_DISABLE
+  };
+  ESP_ERROR_CHECK(gpio_config(&dac_rst_gpio_cfg));
+
+  i2c_master_bus_config_t dac_i2c_bus_config = {
+    .i2c_port = I2C_NUM_0,
+    .sda_io_num = DAC_I2C_SDA_GPIO,
+    .scl_io_num = DAC_I2C_SCL_GPIO,
+    .clk_source = I2C_CLK_SRC_DEFAULT,
+    .glitch_ignore_cnt = 7,
+    .intr_priority = 0,
+    .trans_queue_depth = 48,
+    .flags = {
+      .enable_internal_pullup = 0,
+      .allow_pd = 0
+    }
+  };
+  ESP_ERROR_CHECK(i2c_new_master_bus(&dac_i2c_bus_config, &this->bus_handle));
+
+  i2c_device_config_t dev_config = {
+    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+    .device_address = DAC_I2C_ADDR,
+    .scl_speed_hz = DAC_I2C_FREQ_HZ,
+    .scl_wait_us = 0,
+    .flags = {
+      .disable_ack_check = 0
+    }
+  };
+  ESP_ERROR_CHECK(i2c_master_bus_add_device(this->bus_handle, &dev_config, &this->dev_handle));
 
   i2s_chan_config_t i2s_cfg = {
     .id = I2S_NUM_0, // Make argument??
@@ -134,7 +172,7 @@ bool ADAU1966A::init()
       .slot_mask = SLOT_MASK_TDM16,
       .ws_width = I2S_TDM_AUTO_WS_WIDTH,
       .ws_pol = false,
-      .bit_shift = true,
+      .bit_shift = false,
       .left_align = false,
       .big_endian = false,
       .bit_order_lsb = false,
@@ -206,6 +244,113 @@ void ADAU1966A::stop_thread()
   this->task = nullptr;
 }
 
+void ADAU1966A::setup_dac()
+{
+  ESP_LOGI(ADAU1966A::TAG, "Resetting ADAU1966A using DAC_RST pin");
+  gpio_set_level(DAC_RST_GPIO, 0);
+  vTaskDelay(pdMS_TO_TICKS(1000));
+  gpio_set_level(DAC_RST_GPIO, 1);
+  vTaskDelay(pdMS_TO_TICKS(1000));
+
+  ESP_LOGI(ADAU1966A::TAG, "Configuring ADAU1966A registers at I2C address %x", DAC_I2C_ADDR);
+
+  const uint8_t pll_clk_ctrl0_val = (
+    PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI |
+    PLL_CLK_CTRL0_XTAL_SET_OFF |
+    PLL_CLK_CTRL0_SOFT_RST_NORMAL |
+    PLL_CLK_CTRL0_MCS_256 |
+    PLL_CLK_CTRL0_PUP_POWER_UP
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x00: 0x%x", pll_clk_ctrl0_val);
+
+  const uint8_t pll_clk_ctrl1_val = (
+    // PLL_CLK_CTRL1_LOWPWR_MODE_I2C | // [7:6]
+    PLL_CLK_CTRL1_MCLKO_SEL_DISABLED | // [5:4]
+    PLL_CLK_CTRL1_MCLKO_SEL_BUFFERED_MCLKI |
+    PLL_CLK_CTRL1_PLL_MUTE_NO_AUTOMUTE | // [3]
+    // Bit 2 read only
+    PLL_CLK_CTRL1_VREF_EN_ENABLED | // [1]
+    PLL_CLK_CTRL1_CLK_SEL_MCLKI // [0]
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x01: 0x%x", pll_clk_ctrl1_val);
+
+  const uint8_t pdn_thrmsens_ctrl1_val = (
+    PDN_THRMSENS_CTRL1_THRM_RATE_1S_CONVERSION | // [7:6]
+    PDN_THRMSENS_CTRL1_THRM_MODE_CONTINUOUS | // [5]
+    // Bit 4 is DNC in continuous mode
+    // Bit 3 reserved
+    PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_ON | // [2]
+    PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
+    PDN_THRMSENS_CTRL1_VREG_PDN_NORMAL_OPERATION // [0]
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x02: 0x%x", pdn_thrmsens_ctrl1_val);
+
+  const uint8_t pdn_ctrl2_val = (
+    PDN_CTRL2_DAC08_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC07_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC06_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC05_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC04_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC03_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC02_PDN_NORMAL_OPERATION |
+    PDN_CTRL2_DAC01_PDN_NORMAL_OPERATION
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x03: 0x%x", pdn_ctrl2_val);
+
+  const uint8_t pdn_ctrl3_val = (
+    PDN_CTRL3_DAC16_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC15_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC14_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC13_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC12_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC11_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC10_PDN_NORMAL_OPERATION |
+    PDN_CTRL3_DAC09_PDN_NORMAL_OPERATION
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x04: 0x%x", pdn_ctrl3_val);
+
+  const uint8_t dac_ctrl0_val = (
+    // Bits [7:6] DNC when bits [5:3] != 000
+    DAC_CTRL0_SAI_MODE_TDM16_SINGLE | // [5:3]
+    DAC_CTRL0_FS_32_44_1_48_KHZ | // [2:1]
+    DAC_CTRL0_MMUTE_NORMAL_OPERATION // [0]
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x06: 0x%x", dac_ctrl0_val);
+
+  const uint8_t dac_ctrl1_val = (
+    DAC_CTRL1_BCLK_GEN_NORMAL_OPERATION |
+    DAC_CTRL1_LRCLK_MODE_50_PERCENT_DUTY_CYCLE |
+    DAC_CTRL1_LRCLK_POL_NORMAL |
+    DAC_CTRL1_SAI_MSB_MSB_FIRST |
+    // Bit 3 Reserved
+    DAC_CTRL1_BCLK_RATE_16_PER_FRAME|
+    DAC_CTRL1_BCLK_EDGE_LATCH_RISING_EDGE |
+    DAC_CTRL1_SAI_MS_SLAVE
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x07: 0x%x", dac_ctrl1_val);
+
+  const uint8_t dac_ctrl2_val = (
+    // Bits [7:5] Reserved
+    DAC_CTRL2_BCLK_TDMC_16_CYCLES_PER_SLOT |
+    DAC_CTRL2_DAC_POL_NONINVERTED |
+    DAC_CTRL2_AUTO_MUTE_EN_ENABLED |
+    DAC_CTRL2_DAC_OSR_256_FS |
+    DAC_CTRL2_DE_EMP_EN_DISABLED
+  );
+
+  const uint8_t write_buf[] = {
+    PLL_CLK_CTRL0_REG,
+    pll_clk_ctrl0_val,
+    pll_clk_ctrl1_val,
+    pdn_thrmsens_ctrl1_val,
+    pdn_ctrl2_val,
+    pdn_ctrl3_val,
+    dac_ctrl0_val,
+    dac_ctrl1_val,
+    dac_ctrl2_val
+  };
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, write_buf, sizeof(write_buf), -1));
+}
 
 // Private functions
 void ADAU1966A::thread_entry(void* pv)
@@ -216,9 +361,17 @@ void ADAU1966A::thread_entry(void* pv)
 
 void ADAU1966A::run_thread()
 {
+  this->setup_dac();
+
   sample_t channel_frame[TDM_SLOTS] = {0};
 
   ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
+  
+  // Simple square wave test: alternate between +10000 and -10000 every 480 samples (100 Hz at 48kHz)
+  int square_counter = 0;
+  sample_t square_value = 10000;
+  sample_t test_val = 0;
+  
   for (;;)
   {
     if (this->thread_running == false)
@@ -226,12 +379,27 @@ void ADAU1966A::run_thread()
       break;
     }
 
-    // TODO: Use read_ringbuf() for each channel to read required samples for delay filter, apply delay filter, and store result in channel_frame[channel_num]
+    // Generate square wave test pattern on all channels
     for (size_t frame_num = 0U; frame_num < FRAMES_PER_I2S_CHUNK; ++frame_num)
     {
+      // Toggle square wave every 480 samples (100 Hz at 48kHz)
+      if (square_counter >= 480) {
+        square_value = -square_value;
+        square_counter = 0;
+      }
+      square_counter++;
+
+      if (test_val >= 10000)
+      {
+        test_val = -10000;
+      }
+      test_val += 100;
+      
       for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
       {
-        this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
+        // this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
+        this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
+        // this->chunk[frame_num * TDM_SLOTS + channel_num] = 0b1010000000000001;
       }
     }
     size_t bytes_written = 0;

@@ -37,8 +37,8 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
   CommPacketHeader header;
-  uint8_t curr_pos;
-  uint8_t curr_depth;
+  int16_t curr_pos;
+  uint16_t curr_depth;
   uint8_t seq; // Request seq + 1 (odd number)
 } CommPacketPingRes;
 
@@ -49,15 +49,15 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) { // RPi -> MCU
   CommPacketHeader header;
-  uint8_t pos;
-  uint8_t depth;
+  int16_t pos;
+  uint16_t depth;
   uint8_t seq; // Even
 } CommPacketPosReq;
 
 typedef struct __attribute__((packed)) { // MCU -> RPi
   CommPacketHeader header;
-  uint8_t pos;
-  uint8_t depth;
+  int16_t pos;
+  uint16_t depth;
   uint8_t seq; // Request seq + 1 (odd)
 } CommPacketPosRes;
 

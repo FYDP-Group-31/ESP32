@@ -16,8 +16,8 @@ class UART_Comm {
     uint8_t* control_payload_buf;
     uint8_t* audio_payload_buf;
 
-    uint8_t curr_pos;
-    uint8_t curr_depth;
+    int16_t curr_pos; // [-128, 127]
+    uint16_t curr_depth; // [0, 65535]
 
     bool thread_running;
     TaskHandle_t control_data_recv_task;

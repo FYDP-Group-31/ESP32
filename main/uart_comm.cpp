@@ -317,9 +317,9 @@ void UART_Comm::run_control_data_recv_thread()
                 {
                   CommPacketPosReq request = {
                     .header = header,
-                    .pos = this->control_payload_buf[0],
-                    .depth = this->control_payload_buf[1],
-                    .seq = this->control_payload_buf[2]
+                    .pos = static_cast<int16_t>(this->control_payload_buf[0] | this->control_payload_buf[1] << 8), // Little-endian
+                    .depth = static_cast<uint16_t>(this->control_payload_buf[2] | this->control_payload_buf[3] << 8), // Little-endian
+                    .seq = this->control_payload_buf[4]
                   };
 
                   this->curr_pos = request.pos;

@@ -236,8 +236,8 @@ typedef int16_t sample_t;
 // [3] Reserved
 
 // [2] RW
-#define DAC_CTRL1_BCLK_RATE_32_PER_FRAME (0b0 << 3)
-#define DAC_CTRL1_BCLK_RATE_16_PER_FRAME (0b1 << 3)
+#define DAC_CTRL1_BCLK_RATE_32_PER_FRAME (0b0 << 2)
+#define DAC_CTRL1_BCLK_RATE_16_PER_FRAME (0b1 << 2)
 
 // [1] RW
 #define DAC_CTRL1_BCLK_EDGE_LATCH_RISING_EDGE  (0b0 << 1)

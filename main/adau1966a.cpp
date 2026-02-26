@@ -255,15 +255,25 @@ void ADAU1966A::setup_dac()
 
   ESP_LOGI(ADAU1966A::TAG, "Configuring ADAU1966A registers at I2C address %x", DAC_I2C_ADDR);
 
+  ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
+  ESP_LOGI(ADAU1966A::TAG, "I2S channel enabled");
+
+  ESP_LOGI(ADAU1966A::TAG, "Setting PUP bit to 1");
+  const uint8_t pup_buf[] = {PLL_CLK_CTRL0_REG, 0x00000001};
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pup_buf, sizeof(pup_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1000));
+
   const uint8_t pll_clk_ctrl0_val = (
-    PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI |
-    PLL_CLK_CTRL0_XTAL_SET_OFF |
-    PLL_CLK_CTRL0_SOFT_RST_NORMAL |
-    // PLL_CLK_CTRL0_MCS_512 |
-    PLL_CLK_CTRL0_MCS_768 |
-    PLL_CLK_CTRL0_PUP_POWER_UP
+    PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI | // [7:6]
+    PLL_CLK_CTRL0_XTAL_SET_OFF | // [5:4]
+    PLL_CLK_CTRL0_SOFT_RST_NORMAL |  // [3]
+    PLL_CLK_CTRL0_MCS_768 | // [2:1]
+    PLL_CLK_CTRL0_PUP_POWER_UP // [0]
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x00: 0x%x", pll_clk_ctrl0_val);
+  const uint8_t pll_clk_ctrl0_buf[] = {PLL_CLK_CTRL0_REG, pll_clk_ctrl0_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", PLL_CLK_CTRL0_REG , pll_clk_ctrl0_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pll_clk_ctrl0_buf, sizeof(pll_clk_ctrl0_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 
   const uint8_t pll_clk_ctrl1_val = (
     PLL_CLK_CTRL1_LOWPWR_MODE_I2C | // [7:6]
@@ -273,7 +283,10 @@ void ADAU1966A::setup_dac()
     PLL_CLK_CTRL1_VREF_EN_ENABLED | // [1]
     PLL_CLK_CTRL1_CLK_SEL_MCLKI // [0]
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x01: 0x%x", pll_clk_ctrl1_val);
+  const uint8_t pll_clk_ctrl1_buf[] = {PLL_CLK_CTRL1_REG, pll_clk_ctrl1_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", PLL_CLK_CTRL1_REG, pll_clk_ctrl1_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pll_clk_ctrl1_buf, sizeof(pll_clk_ctrl1_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 
   const uint8_t pdn_thrmsens_ctrl1_val = (
     PDN_THRMSENS_CTRL1_THRM_RATE_4S_CONVERSION | // [7:6]
@@ -284,33 +297,10 @@ void ADAU1966A::setup_dac()
     PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
     PDN_THRMSENS_CTRL1_VREG_PDN_NORMAL_OPERATION // [0]
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x02: 0x%x", pdn_thrmsens_ctrl1_val);
-
-  // const uint8_t pdn_ctrl2_val = (
-  //   PDN_CTRL2_DAC08_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC07_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC06_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC05_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC04_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC03_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC02_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL2_DAC01_PDN_NORMAL_OPERATION
-  // );
-  // ESP_LOGI(ADAU1966A::TAG, "Reg 0x03: 0x%x", pdn_ctrl2_val);
-
-  // const uint8_t pdn_ctrl3_val = (
-  //   PDN_CTRL3_DAC16_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC15_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC14_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC13_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC12_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC11_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC10_PDN_NORMAL_OPERATION |
-  //   PDN_CTRL3_DAC09_PDN_NORMAL_OPERATION
-  // );
-  // ESP_LOGI(ADAU1966A::TAG, "Reg 0x04: 0x%x", pdn_ctrl3_val);
-
-  
+  const uint8_t pdn_thrmsens_ctrl1_buf[] = {PDN_THRMSENS_CTRL1_REG, pdn_thrmsens_ctrl1_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", PDN_THRMSENS_CTRL1_REG, pdn_thrmsens_ctrl1_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pdn_thrmsens_ctrl1_buf, sizeof(pdn_thrmsens_ctrl1_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 
   const uint8_t dac_ctrl1_val = (
     DAC_CTRL1_BCLK_GEN_NORMAL_OPERATION |
@@ -322,7 +312,10 @@ void ADAU1966A::setup_dac()
     DAC_CTRL1_BCLK_EDGE_LATCH_RISING_EDGE |
     DAC_CTRL1_SAI_MS_SLAVE
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x07: 0x%x", dac_ctrl1_val);
+  const uint8_t dac_ctrl1_buf[] = {DAC_CTRL1_REG, dac_ctrl1_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", DAC_CTRL1_REG, dac_ctrl1_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, dac_ctrl1_buf, sizeof(dac_ctrl1_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 
   const uint8_t dac_ctrl2_val = (
     // Bits [7:5] Reserved
@@ -332,7 +325,10 @@ void ADAU1966A::setup_dac()
     DAC_CTRL2_DAC_OSR_256_FS |
     DAC_CTRL2_DE_EMP_EN_DISABLED
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x08: 0x%x", dac_ctrl2_val);
+  const uint8_t dac_ctrl2_buf[] = {DAC_CTRL2_REG, dac_ctrl2_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", DAC_CTRL2_REG, dac_ctrl2_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, dac_ctrl2_buf, sizeof(dac_ctrl2_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 
   const uint8_t dac_ctrl0_val = (
     // Bits [7:6] DNC when bits [5:3] != 000
@@ -340,28 +336,10 @@ void ADAU1966A::setup_dac()
     DAC_CTRL0_FS_32_44_1_48_KHZ | // [2:1]
     DAC_CTRL0_MMUTE_NORMAL_OPERATION // [0]
   );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x06: 0x%x", dac_ctrl0_val);
-
-  const uint8_t pup_write[] = {
-    PLL_CLK_CTRL0_REG,
-    0b00000001
-  };
-  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pup_write, sizeof(pup_write), -1));
-  vTaskDelay(pdMS_TO_TICKS(1000));
-
-  const uint8_t write_buf[] = {
-    PLL_CLK_CTRL0_REG,
-    pll_clk_ctrl0_val,
-    pll_clk_ctrl1_val,
-    pdn_thrmsens_ctrl1_val,
-    // pdn_ctrl2_val,
-    // pdn_ctrl3_val,
-    
-    dac_ctrl1_val,
-    dac_ctrl2_val,
-    dac_ctrl0_val
-  };
-  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, write_buf, sizeof(write_buf), -1));
+  const uint8_t dac_ctrl0_buf[] = {DAC_CTRL0_REG, dac_ctrl0_val};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", DAC_CTRL0_REG, dac_ctrl0_val);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, dac_ctrl0_buf, sizeof(dac_ctrl0_buf), -1));
+  vTaskDelay(pdMS_TO_TICKS(1));
 }
 
 // Private functions
@@ -373,11 +351,11 @@ void ADAU1966A::thread_entry(void* pv)
 
 void ADAU1966A::run_thread()
 {
+  // ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
   this->setup_dac();
 
   sample_t channel_frame[TDM_SLOTS] = {0};
 
-  ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
   
   // Simple square wave test: alternate between +10000 and -10000 every 480 samples (100 Hz at 48kHz)
   int square_counter = 0;
@@ -416,6 +394,7 @@ void ADAU1966A::run_thread()
       // Calculate 440Hz sine wave
       float phase = TWO_PI * SINE_FREQUENCY * sample_counter / SAMPLE_RATE;
       sample_t sine_value = (sample_t)(SINE_AMPLITUDE * sinf(phase));
+      // ESP_LOGI(ADAU1966A::TAG, "Sample %d: Sine value = %d", sample_counter, sine_value);
       sample_counter++;
       
       for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)

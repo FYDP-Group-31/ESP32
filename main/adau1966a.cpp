@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <cassert>
+#include <cmath>
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -170,8 +171,8 @@ bool ADAU1966A::init()
       .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
       .slot_mode = I2S_SLOT_MODE_STEREO,
       .slot_mask = SLOT_MASK_TDM16,
-      .ws_width = I2S_TDM_AUTO_WS_WIDTH,
-      .ws_pol = false,
+      .ws_width = 1,
+      .ws_pol = true,
       .bit_shift = true,
       .left_align = false,
       .big_endian = false,
@@ -258,15 +259,15 @@ void ADAU1966A::setup_dac()
     PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI |
     PLL_CLK_CTRL0_XTAL_SET_OFF |
     PLL_CLK_CTRL0_SOFT_RST_NORMAL |
-    PLL_CLK_CTRL0_MCS_256 |
+    // PLL_CLK_CTRL0_MCS_512 |
+    PLL_CLK_CTRL0_MCS_768 |
     PLL_CLK_CTRL0_PUP_POWER_UP
   );
   ESP_LOGI(ADAU1966A::TAG, "Reg 0x00: 0x%x", pll_clk_ctrl0_val);
 
   const uint8_t pll_clk_ctrl1_val = (
-    // PLL_CLK_CTRL1_LOWPWR_MODE_I2C | // [7:6]
+    PLL_CLK_CTRL1_LOWPWR_MODE_I2C | // [7:6]
     PLL_CLK_CTRL1_MCLKO_SEL_DISABLED | // [5:4]
-    PLL_CLK_CTRL1_MCLKO_SEL_BUFFERED_MCLKI |
     PLL_CLK_CTRL1_PLL_MUTE_NO_AUTOMUTE | // [3]
     // Bit 2 read only
     PLL_CLK_CTRL1_VREF_EN_ENABLED | // [1]
@@ -275,9 +276,9 @@ void ADAU1966A::setup_dac()
   ESP_LOGI(ADAU1966A::TAG, "Reg 0x01: 0x%x", pll_clk_ctrl1_val);
 
   const uint8_t pdn_thrmsens_ctrl1_val = (
-    PDN_THRMSENS_CTRL1_THRM_RATE_1S_CONVERSION | // [7:6]
-    PDN_THRMSENS_CTRL1_THRM_MODE_CONTINUOUS | // [5]
-    // Bit 4 is DNC in continuous mode
+    PDN_THRMSENS_CTRL1_THRM_RATE_4S_CONVERSION | // [7:6]
+    PDN_THRMSENS_CTRL1_THRM_MODE_ONE_SHOT | // [5]
+    PDN_THRMSENS_CTRL1_THRM_GO_RESET | // [4]
     // Bit 3 reserved
     PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_ON | // [2]
     PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
@@ -285,45 +286,39 @@ void ADAU1966A::setup_dac()
   );
   ESP_LOGI(ADAU1966A::TAG, "Reg 0x02: 0x%x", pdn_thrmsens_ctrl1_val);
 
-  const uint8_t pdn_ctrl2_val = (
-    PDN_CTRL2_DAC08_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC07_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC06_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC05_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC04_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC03_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC02_PDN_NORMAL_OPERATION |
-    PDN_CTRL2_DAC01_PDN_NORMAL_OPERATION
-  );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x03: 0x%x", pdn_ctrl2_val);
+  // const uint8_t pdn_ctrl2_val = (
+  //   PDN_CTRL2_DAC08_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC07_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC06_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC05_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC04_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC03_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC02_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL2_DAC01_PDN_NORMAL_OPERATION
+  // );
+  // ESP_LOGI(ADAU1966A::TAG, "Reg 0x03: 0x%x", pdn_ctrl2_val);
 
-  const uint8_t pdn_ctrl3_val = (
-    PDN_CTRL3_DAC16_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC15_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC14_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC13_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC12_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC11_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC10_PDN_NORMAL_OPERATION |
-    PDN_CTRL3_DAC09_PDN_NORMAL_OPERATION
-  );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x04: 0x%x", pdn_ctrl3_val);
+  // const uint8_t pdn_ctrl3_val = (
+  //   PDN_CTRL3_DAC16_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC15_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC14_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC13_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC12_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC11_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC10_PDN_NORMAL_OPERATION |
+  //   PDN_CTRL3_DAC09_PDN_NORMAL_OPERATION
+  // );
+  // ESP_LOGI(ADAU1966A::TAG, "Reg 0x04: 0x%x", pdn_ctrl3_val);
 
-  const uint8_t dac_ctrl0_val = (
-    // Bits [7:6] DNC when bits [5:3] != 000
-    DAC_CTRL0_SAI_MODE_TDM16_SINGLE | // [5:3]
-    DAC_CTRL0_FS_32_44_1_48_KHZ | // [2:1]
-    DAC_CTRL0_MMUTE_NORMAL_OPERATION // [0]
-  );
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x06: 0x%x", dac_ctrl0_val);
+  
 
   const uint8_t dac_ctrl1_val = (
     DAC_CTRL1_BCLK_GEN_NORMAL_OPERATION |
-    DAC_CTRL1_LRCLK_MODE_50_PERCENT_DUTY_CYCLE |
+    DAC_CTRL1_LRCLK_MODE_PULSE_MODE |
     DAC_CTRL1_LRCLK_POL_NORMAL |
     DAC_CTRL1_SAI_MSB_MSB_FIRST |
     // Bit 3 Reserved
-    DAC_CTRL1_BCLK_RATE_16_PER_FRAME|
+    DAC_CTRL1_BCLK_RATE_32_PER_FRAME |
     DAC_CTRL1_BCLK_EDGE_LATCH_RISING_EDGE |
     DAC_CTRL1_SAI_MS_SLAVE
   );
@@ -333,21 +328,38 @@ void ADAU1966A::setup_dac()
     // Bits [7:5] Reserved
     DAC_CTRL2_BCLK_TDMC_16_CYCLES_PER_SLOT |
     DAC_CTRL2_DAC_POL_NONINVERTED |
-    DAC_CTRL2_AUTO_MUTE_EN_ENABLED |
+    DAC_CTRL2_AUTO_MUTE_EN_DISABLED |
     DAC_CTRL2_DAC_OSR_256_FS |
     DAC_CTRL2_DE_EMP_EN_DISABLED
   );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x08: 0x%x", dac_ctrl2_val);
+
+  const uint8_t dac_ctrl0_val = (
+    // Bits [7:6] DNC when bits [5:3] != 000
+    DAC_CTRL0_SAI_MODE_TDM16_SINGLE | // [5:3]
+    DAC_CTRL0_FS_32_44_1_48_KHZ | // [2:1]
+    DAC_CTRL0_MMUTE_NORMAL_OPERATION // [0]
+  );
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x06: 0x%x", dac_ctrl0_val);
+
+  const uint8_t pup_write[] = {
+    PLL_CLK_CTRL0_REG,
+    0b00000001
+  };
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pup_write, sizeof(pup_write), -1));
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   const uint8_t write_buf[] = {
     PLL_CLK_CTRL0_REG,
     pll_clk_ctrl0_val,
     pll_clk_ctrl1_val,
     pdn_thrmsens_ctrl1_val,
-    pdn_ctrl2_val,
-    pdn_ctrl3_val,
-    dac_ctrl0_val,
+    // pdn_ctrl2_val,
+    // pdn_ctrl3_val,
+    
     dac_ctrl1_val,
-    dac_ctrl2_val
+    dac_ctrl2_val,
+    dac_ctrl0_val
   };
   ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, write_buf, sizeof(write_buf), -1));
 }
@@ -369,8 +381,14 @@ void ADAU1966A::run_thread()
   
   // Simple square wave test: alternate between +10000 and -10000 every 480 samples (100 Hz at 48kHz)
   int square_counter = 0;
-  sample_t square_value = 10000;
+  sample_t square_value = 0b0111111111111111;
   sample_t test_val = 0;
+  
+  // Sine wave at 440Hz
+  const float SINE_FREQUENCY = 440.0f;
+  const float SINE_AMPLITUDE = 25000.0f;
+  const float TWO_PI = 2.0f * M_PI;
+  size_t sample_counter = 0;
   
   for (;;)
   {
@@ -383,22 +401,29 @@ void ADAU1966A::run_thread()
     for (size_t frame_num = 0U; frame_num < FRAMES_PER_I2S_CHUNK; ++frame_num)
     {
       // Toggle square wave every 480 samples (100 Hz at 48kHz)
-      if (square_counter >= 480) {
+      if (square_counter >= 240) {
         square_value = -square_value;
         square_counter = 0;
       }
       square_counter++;
 
-      if (test_val >= 10000)
+      if (test_val >= 30000)
       {
-        test_val = -10000;
+        test_val = -30000;
       }
       test_val += 100;
+      
+      // Calculate 440Hz sine wave
+      float phase = TWO_PI * SINE_FREQUENCY * sample_counter / SAMPLE_RATE;
+      sample_t sine_value = (sample_t)(SINE_AMPLITUDE * sinf(phase));
+      sample_counter++;
       
       for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
       {
         // this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
-        this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
+        // this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
+        // this->chunk[frame_num * TDM_SLOTS + channel_num] = test_val;
+        this->chunk[frame_num * TDM_SLOTS + channel_num] = sine_value;  // Uncomment for 440Hz sine wave
         // this->chunk[frame_num * TDM_SLOTS + channel_num] = 0b1010000000000001;
       }
     }

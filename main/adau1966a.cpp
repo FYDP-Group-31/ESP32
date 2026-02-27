@@ -264,10 +264,12 @@ void ADAU1966A::setup_dac()
   vTaskDelay(pdMS_TO_TICKS(1000));
 
   const uint8_t pll_clk_ctrl0_val = (
-    PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI | // [7:6]
+    // PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI | // [7:6]
+    PLL_CLK_CTRL0_PLLIN_DLRCLK | // [7:6]
     PLL_CLK_CTRL0_XTAL_SET_OFF | // [5:4]
     PLL_CLK_CTRL0_SOFT_RST_NORMAL |  // [3]
-    PLL_CLK_CTRL0_MCS_768 | // [2:1]
+    PLL_CLK_CTRL0_MCS_512 | // [2:1]
+    // PLL_CLK_CTRL0_MCS_768 | // [2:1]
     PLL_CLK_CTRL0_PUP_POWER_UP // [0]
   );
   const uint8_t pll_clk_ctrl0_buf[] = {PLL_CLK_CTRL0_REG, pll_clk_ctrl0_val};
@@ -281,7 +283,8 @@ void ADAU1966A::setup_dac()
     PLL_CLK_CTRL1_PLL_MUTE_NO_AUTOMUTE | // [3]
     // Bit 2 read only
     PLL_CLK_CTRL1_VREF_EN_ENABLED | // [1]
-    PLL_CLK_CTRL1_CLK_SEL_MCLKI // [0]
+    // PLL_CLK_CTRL1_CLK_SEL_MCLKI // [0]
+    PLL_CLK_CTRL1_CLK_SEL_PLL // [0]
   );
   const uint8_t pll_clk_ctrl1_buf[] = {PLL_CLK_CTRL1_REG, pll_clk_ctrl1_val};
   ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", PLL_CLK_CTRL1_REG, pll_clk_ctrl1_val);
@@ -294,7 +297,8 @@ void ADAU1966A::setup_dac()
     PDN_THRMSENS_CTRL1_THRM_GO_RESET | // [4]
     // Bit 3 reserved
     PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_ON | // [2]
-    PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
+    // PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
+    PDN_THRMSENS_CTRL1_PLL_PDN_NORMAL_OPERATION | // [1]
     PDN_THRMSENS_CTRL1_VREG_PDN_NORMAL_OPERATION // [0]
   );
   const uint8_t pdn_thrmsens_ctrl1_buf[] = {PDN_THRMSENS_CTRL1_REG, pdn_thrmsens_ctrl1_val};
@@ -400,9 +404,9 @@ void ADAU1966A::run_thread()
       for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
       {
         // this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
-        // this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
+        this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
         // this->chunk[frame_num * TDM_SLOTS + channel_num] = test_val;
-        this->chunk[frame_num * TDM_SLOTS + channel_num] = sine_value;  // Uncomment for 440Hz sine wave
+        // this->chunk[frame_num * TDM_SLOTS + channel_num] = sine_value;  // Uncomment for 440Hz sine wave
         // this->chunk[frame_num * TDM_SLOTS + channel_num] = 0b1010000000000001;
       }
     }

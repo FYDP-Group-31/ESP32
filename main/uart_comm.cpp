@@ -410,63 +410,83 @@ void UART_Comm::run_control_data_recv_thread()
 
 void UART_Comm::run_audio_data_recv_thread()
 {
+  constexpr size_t HEADER_SIZE = sizeof(CommPacketHeader);
   constexpr size_t PACKET_SIZE = sizeof(CommPacketAudioData);
-  constexpr size_t PAYLOAD_SIZE = sizeof(CommPacketAudioData) - sizeof(CommPacketHeader);
+  constexpr size_t PAYLOAD_SIZE = PACKET_SIZE - HEADER_SIZE;
   constexpr size_t NUM_SAMPLES = PAYLOAD_SIZE / sizeof(sample_t);
-  
-  size_t bytes_needed = PACKET_SIZE;
-  size_t bytes_in_buffer = 0;
-  uint8_t* packet_buf = this->audio_data_buf;  // Use first 260 bytes for current packet
 
+  uint8_t* packet_buf = this->audio_data_buf;
+  size_t bytes_in_buffer = 0;
   size_t frame_count = 0;
-  
+
   for (;;)
   {
-    // Read exactly the bytes we need to complete the packet
+    // Read bytes to fill up to PACKET_SIZE
+    size_t bytes_needed = PACKET_SIZE - bytes_in_buffer;
     int n = uart_read_bytes(UART_NUM_0, packet_buf + bytes_in_buffer, bytes_needed, pdMS_TO_TICKS(50));
-    
-    if (n > 0)
+
+    if (n <= 0) continue;
+
+    bytes_in_buffer += n;
+
+    // Need at least the header before we can validate
+    if (bytes_in_buffer < HEADER_SIZE) continue;
+
+    // Validate header
+    if (
+      packet_buf[0] != REQUEST_PACKET ||
+      packet_buf[1] != MCU_ADDR ||
+      packet_buf[2] != CMD_AUDIO_DATA ||
+      packet_buf[3] != NUM_SAMPLES
+    )
     {
-      bytes_in_buffer += n;
-      bytes_needed -= n;
-      
-      // Check if we have a complete packet
-      if (bytes_needed == 0)
+      ESP_LOGE(
+        "UART0", "Invalid packet header: [0x%02X, 0x%02X, 0x%02X, 0x%02X], resyncing",
+        packet_buf[0], packet_buf[1], packet_buf[2], packet_buf[3]
+      );
+
+      // Re-sync: find next potential start byte (0xAA) after position 0
+      size_t next_start = 0;
+      for (size_t j = 1; j < bytes_in_buffer; ++j)
       {
-        // Validate header
-        if (
-          packet_buf[0] == REQUEST_PACKET && 
-          packet_buf[1] == MCU_ADDR && 
-          packet_buf[2] == CMD_AUDIO_DATA && 
-          packet_buf[3] == NUM_SAMPLES
-        )
+        if (packet_buf[j] == REQUEST_PACKET)
         {
-          ++frame_count;
-          // Convert samples from network order (big-endian) to host order
-          sample_t* samples = (sample_t*)(packet_buf + 4);
-          
-          // Write audio data to DAC ring buffer
-          if (!dac->write_to_ringbuf(samples, NUM_SAMPLES))
-          {
-            ESP_LOGW("UART0", "Failed to write audio data to DAC ring buffer");
-          }
-          else
-          {
-            ESP_LOGI("UART0", "Wrote %d samples to DAC ring buffer (%d)", NUM_SAMPLES, frame_count);
-          }
+          next_start = j;
+          break;
         }
-        else
-        {
-          ESP_LOGE(
-            "UART0", "Invalid packet header: [0x%02X, 0x%02X, 0x%02X, 0x%02X]",
-            packet_buf[0], packet_buf[1], packet_buf[2], packet_buf[3]
-          );
-        }
-        
-        // Reset for next packet
-        bytes_in_buffer = 0;
-        bytes_needed = PACKET_SIZE;
       }
+
+      if (next_start > 0)
+      {
+        // Shift remaining data to the front and retry
+        size_t remaining = bytes_in_buffer - next_start;
+        memmove(packet_buf, packet_buf + next_start, remaining);
+        bytes_in_buffer = remaining;
+      }
+      else
+      {
+        // No start byte found, discard everything
+        bytes_in_buffer = 0;
+      }
+      continue;
     }
+
+    // Header is valid — wait for the full packet
+    if (bytes_in_buffer < PACKET_SIZE) continue;
+
+    // Full valid packet received
+    ++frame_count;
+    sample_t* samples = (sample_t*)(packet_buf + HEADER_SIZE);
+
+    if (!dac->write_to_ringbuf(samples, NUM_SAMPLES))
+    {
+      ESP_LOGW("UART0", "Failed to write audio data to DAC ring buffer");
+    }
+    else
+    {
+      ESP_LOGI("UART0", "Wrote %d samples to DAC ring buffer (%d)", NUM_SAMPLES, frame_count);
+    }
+
+    bytes_in_buffer = 0;
   }
 }

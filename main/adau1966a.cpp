@@ -53,11 +53,11 @@ ADAU1966A::ADAU1966A(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_g
   sliding_window_buf(nullptr),
   sliding_window_read_idx(0),
   sliding_window_write_idx(0),
-  sliding_window_channel_idx{0},
   sliding_window_remaining_size(0),
   channel_delay_offset{0},
-  channel_frame_buf(nullptr),
+  audio_mode(AUDIO_MODE_INPUT),
   chunk(nullptr),
+  i2s_sliding_window(nullptr),
   thread_running(false),
   task(nullptr)
 {
@@ -77,21 +77,6 @@ bool ADAU1966A::init()
   );
   this->sliding_window_remaining_size = audio_buf_size / sizeof(sample_t);
 
-  this->channel_frame_buf = (sample_t**)heap_caps_malloc(TDM_SLOTS * sizeof(sample_t*), MALLOC_CAP_8BIT);
-  for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
-  {
-    this->channel_frame_buf[channel] = (sample_t*)heap_caps_malloc(
-      FRAMES_PER_I2S_CHUNK * sizeof(sample_t),
-      MALLOC_CAP_DMA | MALLOC_CAP_SIMD
-    );
-    if (this->channel_frame_buf[channel] == nullptr)
-    {
-      ESP_LOGE(ADAU1966A::TAG, "Could not allocate %d bytes of DMA memory for channel %d", FRAMES_PER_I2S_CHUNK * sizeof(sample_t), channel);
-      return false;
-    }
-    memset(this->channel_frame_buf[channel], 0, FRAMES_PER_I2S_CHUNK * sizeof(sample_t));
-  }
-
   this->chunk = (sample_t*)heap_caps_malloc(BYTES_PER_I2S_CHUNK, MALLOC_CAP_DMA);
   if (this->chunk == nullptr)
   {
@@ -99,6 +84,19 @@ bool ADAU1966A::init()
     return false;
   }
   memset(this->chunk, 0, BYTES_PER_I2S_CHUNK);
+
+  // Allocate I2S sliding window (3 I2S chunks worth of mono samples)
+  constexpr size_t SW_SAMPLES = 3 * FRAMES_PER_I2S_CHUNK;
+  this->i2s_sliding_window = (sample_t*)heap_caps_malloc(
+    SW_SAMPLES * sizeof(sample_t),
+    MALLOC_CAP_DMA | MALLOC_CAP_SIMD
+  );
+  if (this->i2s_sliding_window == nullptr)
+  {
+    ESP_LOGE(ADAU1966A::TAG, "Could not allocate %d bytes for I2S sliding window", SW_SAMPLES * sizeof(sample_t));
+    return false;
+  }
+  memset(this->i2s_sliding_window, 0, SW_SAMPLES * sizeof(sample_t));
 
   gpio_config_t uart_full_signal_gpio_cfg = {
     .pin_bit_mask = (1ULL << AUDIO_BUF_FULL_GPIO),
@@ -206,12 +204,8 @@ void ADAU1966A::deinit()
   heap_caps_free(this->chunk);
   this->chunk = nullptr;
 
-  for (uint8_t channel = 0U; channel < TDM_SLOTS; ++channel)
-  {
-    heap_caps_free(this->channel_frame_buf[channel]);
-  }
-  heap_caps_free(this->channel_frame_buf);
-  this->channel_frame_buf = nullptr;
+  heap_caps_free(this->i2s_sliding_window);
+  this->i2s_sliding_window = nullptr;
 
   heap_caps_free(this->sliding_window_buf);
   this->sliding_window_buf = nullptr;
@@ -224,7 +218,7 @@ bool ADAU1966A::start_thread()
     return true;
   }
   this->thread_running = true;
-  BaseType_t ret = xTaskCreatePinnedToCore(&ADAU1966A::thread_entry, ADAU1966A::TAG, 4096, this, 5, &this->task, tskNO_AFFINITY);
+  BaseType_t ret = xTaskCreatePinnedToCore(&ADAU1966A::i2s_thread_create, ADAU1966A::TAG, 4096, this, 5, &this->task, tskNO_AFFINITY);
   if (ret == pdPASS)
   {
     return true;
@@ -258,18 +252,11 @@ void ADAU1966A::setup_dac()
   ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
   ESP_LOGI(ADAU1966A::TAG, "I2S channel enabled");
 
-  ESP_LOGI(ADAU1966A::TAG, "Setting PUP bit to 1");
-  const uint8_t pup_buf[] = {PLL_CLK_CTRL0_REG, 0x00000001};
-  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, pup_buf, sizeof(pup_buf), -1));
-  vTaskDelay(pdMS_TO_TICKS(1000));
-
   const uint8_t pll_clk_ctrl0_val = (
-    // PLL_CLK_CTRL0_PLLIN_MCLKCI_XTALI | // [7:6]
     PLL_CLK_CTRL0_PLLIN_DLRCLK | // [7:6]
     PLL_CLK_CTRL0_XTAL_SET_OFF | // [5:4]
     PLL_CLK_CTRL0_SOFT_RST_NORMAL |  // [3]
-    PLL_CLK_CTRL0_MCS_512 | // [2:1]
-    // PLL_CLK_CTRL0_MCS_768 | // [2:1]
+    // Bit [2:1] DNC when PLL set to DLRCLK
     PLL_CLK_CTRL0_PUP_POWER_UP // [0]
   );
   const uint8_t pll_clk_ctrl0_buf[] = {PLL_CLK_CTRL0_REG, pll_clk_ctrl0_val};
@@ -283,7 +270,6 @@ void ADAU1966A::setup_dac()
     PLL_CLK_CTRL1_PLL_MUTE_NO_AUTOMUTE | // [3]
     // Bit 2 read only
     PLL_CLK_CTRL1_VREF_EN_ENABLED | // [1]
-    // PLL_CLK_CTRL1_CLK_SEL_MCLKI // [0]
     PLL_CLK_CTRL1_CLK_SEL_PLL // [0]
   );
   const uint8_t pll_clk_ctrl1_buf[] = {PLL_CLK_CTRL1_REG, pll_clk_ctrl1_val};
@@ -297,7 +283,6 @@ void ADAU1966A::setup_dac()
     PDN_THRMSENS_CTRL1_THRM_GO_RESET | // [4]
     // Bit 3 reserved
     PDN_THRMSENS_CTRL1_TS_PDN_SENSOR_ON | // [2]
-    // PDN_THRMSENS_CTRL1_PLL_PDN_POWER_DOWN | // [1]
     PDN_THRMSENS_CTRL1_PLL_PDN_NORMAL_OPERATION | // [1]
     PDN_THRMSENS_CTRL1_VREG_PDN_NORMAL_OPERATION // [0]
   );
@@ -347,89 +332,164 @@ void ADAU1966A::setup_dac()
 }
 
 // Private functions
-void ADAU1966A::thread_entry(void* pv)
+void ADAU1966A::i2s_thread_create(void* pv)
 {
-  static_cast<ADAU1966A*>(pv)->run_thread();
+  static_cast<ADAU1966A*>(pv)->run_i2s_thread();
   vTaskDelete(nullptr);
 }
 
-void ADAU1966A::run_thread()
+void ADAU1966A::volume_control_thread_create(void* pv)
 {
-  // ESP_ERROR_CHECK(i2s_channel_enable(this->i2s_driver));
+  static_cast<ADAU1966A*>(pv)->run_volume_control_thread();
+  vTaskDelete(nullptr);
+}
+
+void ADAU1966A::run_volume_control_thread()
+{
+  uint8_t attenuation_reg_value = vol_db_to_reg(this->pending_attenuation_db);
+  const uint8_t vol_buf[] = {DACMSTR_VOL_REG, attenuation_reg_value};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x (-%f dB)", DACMSTR_VOL_REG, attenuation_reg_value, this->pending_attenuation_db);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, vol_buf, sizeof(vol_buf), 1));
+}
+
+void ADAU1966A::run_i2s_thread()
+{
   this->setup_dac();
 
-  sample_t channel_frame[TDM_SLOTS] = {0};
+  // Pre-fill the I2S sliding window with silence
+  memset(this->i2s_sliding_window, 0, 3 * FRAMES_PER_I2S_CHUNK * sizeof(sample_t));
 
-  
-  // Simple square wave test: alternate between +10000 and -10000 every 480 samples (100 Hz at 48kHz)
+  // Try to pre-fill all 3 chunks from the ring buffer
+  for (int i = 0; i < 3; ++i)
+  {
+    this->consume_ringbuf(FRAMES_PER_I2S_CHUNK, this->i2s_sliding_window + i * FRAMES_PER_I2S_CHUNK);
+  }
+
+  // Test pattern state
   int square_counter = 0;
-  sample_t square_value = 0b0111111111111111;
-  sample_t test_val = 0;
-  
-  // Sine wave at 440Hz
+  sample_t square_amplitude = 5000;
   const float SINE_FREQUENCY = 440.0f;
   const float SINE_AMPLITUDE = 25000.0f;
   const float TWO_PI = 2.0f * M_PI;
   size_t sample_counter = 0;
-  
+
+  // for (size_t channel = 0U; channel < TDM_SLOTS; ++channel)
+  // {
+  //   this->set_channel_integer_delay_offset(channel, (channel * 5) - 40);
+  // }
+
   for (;;)
   {
-    if (this->thread_running == false)
+    if (!this->thread_running)
     {
       break;
     }
 
-    // Generate square wave test pattern on all channels
-    for (size_t frame_num = 0U; frame_num < FRAMES_PER_I2S_CHUNK; ++frame_num)
-    {
-      // Toggle square wave every 480 samples (100 Hz at 48kHz)
-      if (square_counter >= 240) {
-        square_value = -square_value;
-        square_counter = 0;
-      }
-      square_counter++;
+    this->audio_mode = AUDIO_MODE_INPUT;
 
-      if (test_val >= 30000)
-      {
-        test_val = -30000;
-      }
-      test_val += 100;
-      
-      // Calculate 440Hz sine wave
-      float phase = TWO_PI * SINE_FREQUENCY * sample_counter / SAMPLE_RATE;
-      sample_t sine_value = (sample_t)(SINE_AMPLITUDE * sinf(phase));
-      // ESP_LOGI(ADAU1966A::TAG, "Sample %d: Sine value = %d", sample_counter, sine_value);
-      sample_counter++;
-      
-      for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
-      {
-        // this->chunk[frame_num * TDM_SLOTS + channel_num] = channel_frame[channel_num];
-        this->chunk[frame_num * TDM_SLOTS + channel_num] = square_value;
-        // this->chunk[frame_num * TDM_SLOTS + channel_num] = test_val;
-        // this->chunk[frame_num * TDM_SLOTS + channel_num] = sine_value;  // Uncomment for 440Hz sine wave
-        // this->chunk[frame_num * TDM_SLOTS + channel_num] = 0b1010000000000001;
-      }
-    }
-    size_t bytes_written = 0;
-#if DEBUG
-    int64_t start = esp_timer_get_time();
-#endif // DEBUG
-    esp_err_t ret = i2s_channel_write(this->i2s_driver, this->chunk, BYTES_PER_I2S_CHUNK, &bytes_written, portMAX_DELAY);
-#if DEBUG
-    int64_t end   = esp_timer_get_time();
-#endif // DEBUG
-    if (ret == ESP_OK)
+    if (this->audio_mode == AUDIO_MODE_INPUT)
     {
-#if DEBUG
-      ESP_LOGI(ADAU1966A::TAG, "Wrote %d bytes in %dus on core %d", bytes_written, (end - start), xPortGetCoreID());
-#endif // DEBUG
+      // === Sliding window pipeline ===
+      // Write the middle chunk (index 1) to I2S, applying per-channel delay offsets.
+      // Each channel reads from: i2s_sliding_window[FRAMES_PER_I2S_CHUNK + frame - delay_offset]
+      // Positive delay_offset = delayed (reads from past/chunk 0)
+      // Negative delay_offset = advanced (reads from future/chunk 2)
+      constexpr size_t SW_TOTAL = 3 * FRAMES_PER_I2S_CHUNK;
+
+      for (size_t frame = 0; frame < FRAMES_PER_I2S_CHUNK; ++frame)
+      {
+        for (uint8_t ch = 0; ch < TDM_SLOTS; ++ch)
+        {
+          int32_t idx = (int32_t)(FRAMES_PER_I2S_CHUNK + frame) - this->channel_delay_offset[ch];
+
+          // Clamp to valid sliding window range
+          if (idx < 0) idx = 0;
+          else if ((size_t)idx >= SW_TOTAL) idx = SW_TOTAL - 1;
+
+          this->chunk[frame * TDM_SLOTS + ch] = this->i2s_sliding_window[idx];
+        }
+      }
+
+      size_t bytes_written = 0;
+      esp_err_t ret = i2s_channel_write(this->i2s_driver, this->chunk, BYTES_PER_I2S_CHUNK, &bytes_written, portMAX_DELAY);
+      if (ret != ESP_OK)
+      {
+        ESP_LOGE(ADAU1966A::TAG, "I2S write failed. Expected %dB, wrote %dB", BYTES_PER_I2S_CHUNK, bytes_written);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        continue;
+      }
+
+      // Slide the window forward by one chunk:
+      // Move chunks [1,2] -> positions [0,1]
+      memmove(this->i2s_sliding_window, this->i2s_sliding_window + FRAMES_PER_I2S_CHUNK, 2 * FRAMES_PER_I2S_CHUNK * sizeof(sample_t));
+
+      // Zero the invalidated chunk (new position 2)
+      memset(this->i2s_sliding_window + 2 * FRAMES_PER_I2S_CHUNK, 0, FRAMES_PER_I2S_CHUNK * sizeof(sample_t));
+
+      // Fill the new chunk from the ring buffer
+      this->consume_ringbuf(FRAMES_PER_I2S_CHUNK, this->i2s_sliding_window + 2 * FRAMES_PER_I2S_CHUNK);
+
+      // Flow control: signal ready when ring buffer usage drops below 25%
+      size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
+      size_t used = buffer_capacity - this->sliding_window_remaining_size;
+      if (used < buffer_capacity / 4)
+      {
+        this->signal_ringbuf_ready();
+      }
     }
     else
     {
-      ESP_LOGE(ADAU1966A::TAG, "Failed to write chunk to I2S channel. %dB expected, %dB written", BYTES_PER_I2S_CHUNK, bytes_written);
-      vTaskDelay(pdMS_TO_TICKS(10));
+      // === Test pattern generation ===
+      for (size_t frame_num = 0U; frame_num < FRAMES_PER_I2S_CHUNK; ++frame_num)
+      {
+        if (square_counter >= 240) {
+          square_amplitude = -square_amplitude;
+          square_counter = 0;
+        }
+        square_counter++;
+
+        float phase = TWO_PI * SINE_FREQUENCY * sample_counter / SAMPLE_RATE;
+        sample_t sine_value = (sample_t)(SINE_AMPLITUDE * sinf(phase));
+        sample_counter++;
+
+        for (uint8_t channel_num = 0U; channel_num < TDM_SLOTS; ++channel_num)
+        {
+          switch (this->audio_mode)
+          {
+            case AUDIO_MODE_SINE_WAVE:
+            {
+              this->chunk[frame_num * TDM_SLOTS + channel_num] = sine_value;
+              break;
+            }
+            case AUDIO_MODE_SQUARE_WAVE:
+            {
+              this->chunk[frame_num * TDM_SLOTS + channel_num] = square_amplitude;
+              break;
+            }
+            case AUDIO_MODE_SAWTOOTH:
+            {
+              break;
+            }
+            case AUDIO_MODE_INPUT:
+            default:
+            {
+              ESP_LOGE(ADAU1966A::TAG, "Invalid audio mode %d", this->audio_mode);
+              break;
+            }
+          }
+        }
+      }
+
+      size_t bytes_written = 0;
+
+      esp_err_t ret = i2s_channel_write(this->i2s_driver, this->chunk, BYTES_PER_I2S_CHUNK, &bytes_written, portMAX_DELAY);
+
+      if (ret != ESP_OK)
+      {
+        ESP_LOGE(ADAU1966A::TAG, "Failed to write chunk to I2S. %dB expected, %dB written", BYTES_PER_I2S_CHUNK, bytes_written);
+        vTaskDelay(pdMS_TO_TICKS(10));
+      }
     }
-      
   }
   ESP_ERROR_CHECK(i2s_channel_disable(this->i2s_driver));
 }
@@ -457,36 +517,24 @@ bool ADAU1966A::write_to_ringbuf(const sample_t* data, size_t num_samples)
     size_t second_part_samples = num_samples - first_part_samples;
     
     // Copy first part to end of buffer
-    memcpy(
-      this->sliding_window_buf + this->sliding_window_write_idx, 
-      data, 
-      first_part_samples * sizeof(sample_t)
-    );
+    memcpy(this->sliding_window_buf + this->sliding_window_write_idx, data, first_part_samples * sizeof(sample_t));
     
     // Copy second part to start of buffer
-    memcpy(
-      this->sliding_window_buf, 
-      data + first_part_samples, 
-      second_part_samples * sizeof(sample_t)
-    );
+    memcpy(this->sliding_window_buf, data + first_part_samples, second_part_samples * sizeof(sample_t));
     
     this->sliding_window_write_idx = second_part_samples;
   }
   else
   {
     // No wrap around, single copy
-    memcpy(
-      this->sliding_window_buf + this->sliding_window_write_idx, 
-      data, 
-      num_samples * sizeof(sample_t)
-    );
+    memcpy(this->sliding_window_buf + this->sliding_window_write_idx, data, num_samples * sizeof(sample_t));
     
     this->sliding_window_write_idx += num_samples;
   }
 
   this->sliding_window_remaining_size -= num_samples;
 
-  // If remaining size is less than 25% of buffer capacity, signal to RPi to stop writing more data
+  // Signal UART full when ring buffer is >75% full (free < 25%)
   if (this->get_ringbuf_free_size() < (audio_buf_size / sizeof(sample_t)) / 4)
   {
     this->signal_ringbuf_full();
@@ -500,6 +548,54 @@ size_t ADAU1966A::get_ringbuf_free_size()
   return this->sliding_window_remaining_size;
 }
 
+size_t ADAU1966A::get_ringbuf_used_size()
+{
+  size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
+  return buffer_capacity - this->sliding_window_remaining_size;
+}
+
+size_t ADAU1966A::consume_ringbuf(size_t num_samples, sample_t* out_buf)
+{
+  if (this->sliding_window_buf == nullptr)
+  {
+    ESP_LOGE(ADAU1966A::TAG, "Ring buffer not initialized");
+    return 0;
+  }
+
+  size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
+  size_t available = buffer_capacity - this->sliding_window_remaining_size;
+
+  if (num_samples > available)
+  {
+    num_samples = available; // Only consume what's available; rest stays zero
+  }
+
+  if (num_samples == 0)
+  {
+    return 0;
+  }
+
+  size_t read_idx = this->sliding_window_read_idx;
+
+  if (read_idx + num_samples > buffer_capacity)
+  {
+    // Wrap around
+    size_t first = buffer_capacity - read_idx;
+    size_t second = num_samples - first;
+    memcpy(out_buf, this->sliding_window_buf + read_idx, first * sizeof(sample_t));
+    memcpy(out_buf + first, this->sliding_window_buf, second * sizeof(sample_t));
+  }
+  else
+  {
+    memcpy(out_buf, this->sliding_window_buf + read_idx, num_samples * sizeof(sample_t));
+  }
+
+  this->sliding_window_read_idx = (read_idx + num_samples) % buffer_capacity;
+  this->sliding_window_remaining_size += num_samples;
+
+  return num_samples;
+}
+
 void ADAU1966A::signal_ringbuf_full()
 {
   gpio_set_level(AUDIO_BUF_FULL_GPIO, 0);
@@ -510,69 +606,21 @@ void ADAU1966A::signal_ringbuf_ready()
   gpio_set_level(AUDIO_BUF_FULL_GPIO, 1);
 }
 
-size_t ADAU1966A::read_ringbuf(size_t num_samples, int32_t offset, sample_t* out_buf)
-{
-  if (this->sliding_window_buf == nullptr) {
-    ESP_LOGE(ADAU1966A::TAG, "Sliding window buffer not initialized");
-    return 0;
-  }
-
-  size_t buffer_capacity = audio_buf_size / sizeof(sample_t);
-  size_t samples_written = buffer_capacity - this->sliding_window_remaining_size;
-
-  // Check if offset + num_samples exceeds available data
-  if (offset + num_samples > samples_written) {
-    ESP_LOGW(ADAU1966A::TAG, "Not enough data in buffer. Requested: %d samples at offset %d, Available: %d", num_samples, offset, samples_written);
-    if (offset >= samples_written) {
-      return 0; // Offset is beyond available data
-    }
-    num_samples = samples_written - offset; // Read what's available from offset
-  }
-
-  if (num_samples == 0) {
-    ESP_LOGE(ADAU1966A::TAG, "Read of size 0 requested from ring buffer");
-    return 0;
-  }
-
-  // Calculate read start index (offset from sliding_window_read_idx)
-  size_t read_start_idx = (this->sliding_window_read_idx + offset + buffer_capacity) % buffer_capacity;
-
-  if (read_start_idx + num_samples > buffer_capacity) {
-    // Read wraps around the buffer boundary
-    size_t first_part_samples = buffer_capacity - read_start_idx;
-    size_t second_part_samples = num_samples - first_part_samples;
-
-    // Copy first part from end of buffer
-    memcpy(
-      out_buf, 
-      this->sliding_window_buf + read_start_idx, 
-      first_part_samples * sizeof(sample_t)
-    );
-
-    // Copy second part from start of buffer
-    memcpy(
-      out_buf + first_part_samples, 
-      this->sliding_window_buf, 
-      second_part_samples * sizeof(sample_t)
-    );
-  } else {
-    // Single contiguous read
-    memcpy(
-      out_buf, 
-      this->sliding_window_buf + read_start_idx, 
-      num_samples * sizeof(sample_t)
-    );
-  }
-
-  return num_samples;
-}
-
 // Sets integer number of samples to delay channel output
 void ADAU1966A::set_channel_integer_delay_offset(uint8_t channel, int32_t offset)
 {
   if (channel >= TDM_SLOTS) {
     ESP_LOGE(ADAU1966A::TAG, "Invalid channel number %d for delay offset", channel);
     return;
+  }
+  // Clamp to sliding window limits (max 1 chunk in either direction)
+  constexpr int32_t MAX_OFFSET = (int32_t)FRAMES_PER_I2S_CHUNK;
+  if (offset > MAX_OFFSET) {
+    ESP_LOGW(ADAU1966A::TAG, "Clamping channel %d delay offset from %d to %d", channel, offset, MAX_OFFSET);
+    offset = MAX_OFFSET;
+  } else if (offset < -MAX_OFFSET) {
+    ESP_LOGW(ADAU1966A::TAG, "Clamping channel %d delay offset from %d to %d", channel, offset, -MAX_OFFSET);
+    offset = -MAX_OFFSET;
   }
   this->channel_delay_offset[channel] = offset;
 }

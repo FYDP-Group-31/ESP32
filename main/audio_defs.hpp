@@ -1,6 +1,6 @@
 #pragma once
 
-#define SAMPLE_RATE 44100
+#define SAMPLE_RATE 48000
 #define TDM_SLOTS 16
 
 typedef int16_t sample_t;
@@ -269,3 +269,52 @@ typedef int16_t sample_t;
 // [0] RW
 #define DAC_CTRL2_DE_EMP_EN_DISABLED (0b0 << 0)
 #define DAC_CTRL2_DE_EMP_EN_ENABLED  (0b1 << 0)
+
+// Volume Attenuation mapping (registers 0x0B - 0x1B)
+// 0x00 =   0.000 dB (no attenuation)
+// 0x01 =  -0.375 dB
+// ...
+// 0xFF = -95.625 dB
+// Each step decreases by 0.375 dB
+//
+// attenuation_dB = -0.375 * register_value
+
+#define VOL_ATTEN_STEP_DB  0.375f
+#define VOL_ATTEN_MIN_DB   0.0f
+#define VOL_ATTEN_MAX_DB   95.625f
+
+/**
+ * @brief Convert a uint8_t register value to attenuation in dB.
+ * @param reg_val Register value (0x00 - 0xFF)
+ * @return Attenuation in dB (0.0 to -95.625)
+ */
+static inline float vol_reg_to_db(uint8_t reg_val)
+{
+    return -(VOL_ATTEN_STEP_DB * reg_val);
+}
+
+/**
+ * @brief Convert a desired attenuation in dB to a uint8_t register value.
+ *        Input should be a positive value representing the magnitude of attenuation.
+ *        Values are clamped to the valid range [0.0, 95.625].
+ * @param atten_db Attenuation magnitude in dB (e.g. 6.0 for -6 dB)
+ * @return Register value (0x00 - 0xFF)
+ */
+static inline uint8_t vol_db_to_reg(float atten_db)
+{
+    if (atten_db <= VOL_ATTEN_MIN_DB) return 0x00;
+    if (atten_db >= VOL_ATTEN_MAX_DB) return 0xFF;
+    return (uint8_t)(atten_db / VOL_ATTEN_STEP_DB + 0.5f);
+}
+
+// Common volume attenuation presets
+#define VOL_0_DB        0x00  //   0.000 dB
+#define VOL_0_375_DB    0x01  //  -0.375 dB
+#define VOL_0_75_DB     0x02  //  -0.750 dB
+#define VOL_1_5_DB      0x04  //  -1.500 dB
+#define VOL_3_DB        0x08  //  -3.000 dB
+#define VOL_6_DB        0x10  //  -6.000 dB
+#define VOL_12_DB       0x20  // -12.000 dB
+#define VOL_24_DB       0x40  // -24.000 dB
+#define VOL_48_DB       0x80  // -48.000 dB
+#define VOL_95_625_DB   0xFF  // -95.625 dB (max attenuation)

@@ -60,9 +60,7 @@ class ADAU1966A {
     static void i2s_thread_create(void* pv);
     void run_i2s_thread();
 
-    float pending_attenuation_db; // Set pending_attenuation_db before creating volume control thread
-    static void volume_control_thread_create(void* pv);
-    void run_volume_control_thread();
+    void set_volume(float new_attenuation_db);
 
     void signal_ringbuf_full();
     void signal_ringbuf_ready();

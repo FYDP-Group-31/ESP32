@@ -329,6 +329,8 @@ void ADAU1966A::setup_dac()
   ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x", DAC_CTRL0_REG, dac_ctrl0_val);
   ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, dac_ctrl0_buf, sizeof(dac_ctrl0_buf), -1));
   vTaskDelay(pdMS_TO_TICKS(1));
+
+  this->set_volume(-40.0f);
 }
 
 // Private functions
@@ -338,18 +340,12 @@ void ADAU1966A::i2s_thread_create(void* pv)
   vTaskDelete(nullptr);
 }
 
-void ADAU1966A::volume_control_thread_create(void* pv)
+void ADAU1966A::set_volume(float new_attenuation_db)
 {
-  static_cast<ADAU1966A*>(pv)->run_volume_control_thread();
-  vTaskDelete(nullptr);
-}
-
-void ADAU1966A::run_volume_control_thread()
-{
-  uint8_t attenuation_reg_value = vol_db_to_reg(this->pending_attenuation_db);
+  uint8_t attenuation_reg_value = vol_db_to_reg(new_attenuation_db);
   const uint8_t vol_buf[] = {DACMSTR_VOL_REG, attenuation_reg_value};
-  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x (-%f dB)", DACMSTR_VOL_REG, attenuation_reg_value, this->pending_attenuation_db);
-  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, vol_buf, sizeof(vol_buf), 1));
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x (-%f dB)", DACMSTR_VOL_REG, attenuation_reg_value, new_attenuation_db);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, vol_buf, sizeof(vol_buf), 0));
 }
 
 void ADAU1966A::run_i2s_thread()

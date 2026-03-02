@@ -67,14 +67,13 @@ try:
     ser = serial.Serial('/dev/ttyACM1', 2000000, timeout=1)
     time.sleep(0.1)  # Wait for serial to initialize
     
-    # Open packet log file
-    with open('packet_log.txt', 'w') as log_file:
-        log_file.write("Audio Packet Transmission Log\n")
-        log_file.write("=" * 80 + "\n\n")
-        
-        # Send audio data in packets
-        total_packets = (len(mono_data) + SAMPLES_PER_PACKET - 1) // SAMPLES_PER_PACKET
-        
+    total_packets = (len(mono_data) + SAMPLES_PER_PACKET - 1) // SAMPLES_PER_PACKET
+    loop_count = 0
+
+    while True:
+        loop_count += 1
+        print(f"--- Loop {loop_count} ---")
+
         for i in range(0, len(mono_data), SAMPLES_PER_PACKET):
             # Get chunk of audio samples
             chunk = mono_data[i:i+SAMPLES_PER_PACKET]
@@ -93,28 +92,22 @@ try:
             # Send packet
             packet = header + audio_bytes
             ser.write(packet)
+            ser.flush()
             
             packet_num = i // SAMPLES_PER_PACKET + 1
-            
-            # Log packet details
-            log_file.write(f"Packet #{packet_num}/{total_packets}\n")
-            log_file.write(f"  Header: [0x{REQUEST_PACKET:02X}, 0x{MCU_ADDR:02X}, 0x{CMD_AUDIO_DATA:02X}, 0x{SAMPLES_PER_PACKET:02X}]\n")
-            log_file.write(f"  Packet size: {len(packet)} bytes (4 header + 256 payload)\n")
-            log_file.write(f"  Sample range: {i} to {i + len(chunk) - 1}\n")
-            log_file.write(f"  First 5 samples: {chunk[:5].tolist()}\n")
-            log_file.write(f"  Last 5 samples: {chunk[-5:].tolist()}\n")
-            log_file.write(f"  First 10 payload bytes (hex): {' '.join(f'{b:02X}' for b in audio_bytes[:10])}\n")
-            log_file.write("\n")
             
             if packet_num % 100 == 0:
                 print(f"Sent packet {packet_num}/{total_packets}")
         
-        print(f"Successfully sent {total_packets} packets ({len(mono_data)} samples)")
-        print(f"Packet log saved to packet_log.txt")
+        print(f"Completed loop {loop_count} ({total_packets} packets, {len(mono_data)} samples)")
     
-    ser.close()
-    
+except KeyboardInterrupt:
+    print("\nStopped by user")
 except serial.SerialException as e:
     print(f"Error opening serial port: {e}")
 except Exception as e:
+    print(f"Error: {e}")
+finally:
+    if 'ser' in dir() and ser.is_open:
+        ser.close()
     print(f"Error: {e}")

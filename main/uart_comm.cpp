@@ -303,7 +303,7 @@ void UART_Comm::run_control_data_recv_thread()
                     .seq = static_cast<uint8_t>(request.seq + 1)
                   };
                   int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
-                  if (bytes_written != sizeof(CommPacketHeader))
+                  if (bytes_written != sizeof(response))
                   {
                     ESP_LOGE("UART1", "Failed to send ping response packet");
                   }
@@ -332,7 +332,7 @@ void UART_Comm::run_control_data_recv_thread()
                     .seq = static_cast<uint8_t>(request.seq + 1)
                   };
                   int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
-                  if (bytes_written != sizeof(CommPacketHeader))
+                  if (bytes_written != sizeof(response))
                   {
                     ESP_LOGE("UART1", "Failed to send position response packet");
                   }
@@ -358,7 +358,7 @@ void UART_Comm::run_control_data_recv_thread()
                     .reset_status = 0 // TODO: Define reset status codes
                   };
                   int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
-                  if (bytes_written != sizeof(CommPacketHeader))
+                  if (bytes_written != sizeof(response))
                   {
                     ESP_LOGE("UART1", "Failed to send reset response packet");
                   }

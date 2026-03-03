@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
@@ -5,8 +6,12 @@ import serial
 import struct
 import time
 
+# Number of loops from command line argument, default to 1
+num_loops = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+
 # Read the WAV file
-sample_rate, audio_data = wavfile.read('M1F1-int16-AFsp.wav')
+# sample_rate, audio_data = wavfile.read('M1F1-int16-AFsp.wav')
+sample_rate, audio_data = wavfile.read('we-are-charlie-kirk.wav')
 
 # Create time axis
 duration = len(audio_data) / sample_rate
@@ -54,7 +59,7 @@ print("Saved waveform plot to audio_waveform.png")
 plt.close()
 
 # Send audio data over serial
-print(f"Sending {len(mono_data)} samples to /dev/ttyACM1...")
+print(f"Sending {len(mono_data)} samples to /dev/ttyAMA0")
 
 # Packet constants from comm_packet.hpp
 REQUEST_PACKET = 0xAA
@@ -68,11 +73,9 @@ try:
     time.sleep(0.1)  # Wait for serial to initialize
     
     total_packets = (len(mono_data) + SAMPLES_PER_PACKET - 1) // SAMPLES_PER_PACKET
-    loop_count = 0
 
-    while True:
-        loop_count += 1
-        print(f"--- Loop {loop_count} ---")
+    for loop_count in range(1, num_loops + 1):
+        print(f"--- Loop {loop_count}/{num_loops} ---")
 
         for i in range(0, len(mono_data), SAMPLES_PER_PACKET):
             # Get chunk of audio samples
@@ -98,6 +101,7 @@ try:
             
             if packet_num % 100 == 0:
                 print(f"Sent packet {packet_num}/{total_packets}")
+            time.sleep(0.002)
         
         print(f"Completed loop {loop_count} ({total_packets} packets, {len(mono_data)} samples)")
     
@@ -110,4 +114,3 @@ except Exception as e:
 finally:
     if 'ser' in dir() and ser.is_open:
         ser.close()
-    print(f"Error: {e}")

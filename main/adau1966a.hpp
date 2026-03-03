@@ -67,6 +67,8 @@ class ADAU1966A {
 
     void setup_dac();
 
+    void set_channel_integer_delay_offset(uint8_t channel, int32_t offset);
+
   public:
     static constexpr const char* TAG = "ADAU1966A";
 
@@ -88,7 +90,7 @@ class ADAU1966A {
     size_t get_ringbuf_free_size();
     size_t get_ringbuf_used_size();
 
-    void set_channel_integer_delay_offset(uint8_t channel, int32_t offset);
+    void set_integer_delay_offset(int16_t pos, int16_t depth);
 };
 
 bool init_adau1966a(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_gpio, gpio_num_t data_gpio);

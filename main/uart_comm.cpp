@@ -482,10 +482,6 @@ void UART_Comm::run_audio_data_recv_thread()
     {
       ESP_LOGW("UART0", "Failed to write audio data to DAC ring buffer");
     }
-    else
-    {
-      ESP_LOGI("UART0", "Wrote %d samples to DAC ring buffer (%d)", NUM_SAMPLES, frame_count);
-    }
 
     bytes_in_buffer = 0;
   }

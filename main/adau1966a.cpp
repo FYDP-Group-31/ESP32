@@ -602,6 +602,16 @@ void ADAU1966A::signal_ringbuf_ready()
   gpio_set_level(AUDIO_BUF_FULL_GPIO, 1);
 }
 
+void ADAU1966A::set_integer_delay_offset(int16_t pos, int16_t depth)
+{
+  size_t delay_offset[TDM_SLOTS] = {0};
+  for (uint8_t channel = 0; channel < TDM_SLOTS; ++channel)
+  {
+    // this->set_channel_integer_delay_offset(channel, 0U);
+    this->channel_delay_offset[channel] = delay_offset[channel];
+  }
+}
+
 // Sets integer number of samples to delay channel output
 void ADAU1966A::set_channel_integer_delay_offset(uint8_t channel, int32_t offset)
 {

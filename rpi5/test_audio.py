@@ -64,7 +64,7 @@ SAMPLES_PER_PACKET = 128
 
 try:
     # Open serial port
-    ser = serial.Serial('/dev/ttyACM1', 2000000, timeout=1)
+    ser = serial.Serial('/dev/ttyAMA0', 2000000, timeout=1)
     time.sleep(0.1)  # Wait for serial to initialize
     
     total_packets = (len(mono_data) + SAMPLES_PER_PACKET - 1) // SAMPLES_PER_PACKET

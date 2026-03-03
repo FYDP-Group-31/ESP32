@@ -602,13 +602,42 @@ void ADAU1966A::signal_ringbuf_ready()
   gpio_set_level(AUDIO_BUF_FULL_GPIO, 1);
 }
 
-void ADAU1966A::set_integer_delay_offset(int16_t pos, int16_t depth)
+void ADAU1966A::set_integer_delay_offset(int16_t pos, uint16_t depth)
 {
-  size_t delay_offset[TDM_SLOTS] = {0};
-  for (uint8_t channel = 0; channel < TDM_SLOTS; ++channel)
+  constexpr uint32_t SPEED_OF_SOUND = 343U; // m/s
+  constexpr float CM_TO_M = 0.01f;
+
+  // Speaker positions along the array axis relative to center (cm)
+  constexpr float array_pos_cm[TDM_SLOTS] = {
+    -68.6f, -54.5f, -42.5f, -32.4f, -23.7f, -16.1f, -9.3f, -3.1f,
+    3.1f, 9.3f, 16.1f, 23.7f, 32.4f, 42.5f, 54.5f, 68.6f
+  };
+
+  // Compute distance from each speaker to the focal point (pos, depth) in cm
+  float distance_cm[TDM_SLOTS];
+  float max_distance_cm = 0.0f;
+
+  for (uint8_t ch = 0; ch < TDM_SLOTS; ++ch)
   {
-    // this->set_channel_integer_delay_offset(channel, 0U);
-    this->channel_delay_offset[channel] = delay_offset[channel];
+    float dx = array_pos_cm[ch] - (float)pos;
+    float dz = (float)depth;
+    distance_cm[ch] = sqrtf(dx * dx + dz * dz);
+    if (distance_cm[ch] > max_distance_cm)
+    {
+      max_distance_cm = distance_cm[ch];
+    }
+  }
+
+  // Delay-and-sum beamforming: the farthest speaker gets 0 delay
+  // Closer speakers are delayed so all wavefronts arrive at the focal point simultaneously.
+  for (uint8_t ch = 0; ch < TDM_SLOTS; ++ch)
+  {
+    float delay_m = (max_distance_cm - distance_cm[ch]) * CM_TO_M;
+    float delay_s = delay_m / (float)SPEED_OF_SOUND;
+    int32_t delay_samples = (int32_t)roundf(delay_s * (float)SAMPLE_RATE);
+
+    this->set_channel_integer_delay_offset(ch, delay_samples);
+    ESP_LOGI(ADAU1966A::TAG, "Channel %d: dist=%.1fcm, delay=%d samples", ch, distance_cm[ch], delay_samples);
   }
 }
 

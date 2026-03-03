@@ -339,6 +339,7 @@ void UART_Comm::run_control_data_recv_thread()
                   else
                   {
                     ESP_LOGI("UART1", "Sent position response packet");
+                    dac->set_integer_delay_offset(request.pos, request.depth);
                   }
                   break;
                 }

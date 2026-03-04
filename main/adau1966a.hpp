@@ -66,6 +66,7 @@ class ADAU1966A {
     void setup_dac();
 
     void set_channel_integer_delay_offset(uint8_t channel, int32_t offset);
+    void set_channel_volume(uint8_t channel, float attenuation_db);
 
   public:
     static constexpr const char* TAG = "ADAU1966A";

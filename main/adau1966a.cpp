@@ -331,6 +331,14 @@ void ADAU1966A::setup_dac()
   vTaskDelay(pdMS_TO_TICKS(1));
 
   this->set_volume(40.0f);
+  constexpr float channel_atten_db[TDM_SLOTS] = {
+    9.375f, 8.625f, 7.125f, 4.875f, 3.0f, 1.5f, 0.375f, 0.0f,
+    0.0f, 0.375f, 1.5f, 3.0f, 4.875f, 7.125f, 8.625f, 9.375f
+  };
+  for (uint8_t ch = 0; ch < TDM_SLOTS; ++ch)
+  {
+    this->set_channel_volume(ch, channel_atten_db[ch]);
+  }
 }
 
 // Private functions
@@ -658,4 +666,17 @@ void ADAU1966A::set_channel_integer_delay_offset(uint8_t channel, int32_t offset
     offset = -MAX_OFFSET;
   }
   this->channel_delay_offset[channel] = offset;
+}
+
+void ADAU1966A::set_channel_volume(uint8_t channel, float attenuation_db)
+{
+  if (channel >= TDM_SLOTS) {
+    ESP_LOGE(ADAU1966A::TAG, "Invalid channel number %d for volume control", channel);
+    return;
+  }
+
+  uint8_t attenuation_reg_value = vol_db_to_reg(attenuation_db);
+  const uint8_t vol_buf[] = {static_cast<uint8_t>(DAC01_VOL_REG + channel), attenuation_reg_value};
+  ESP_LOGI(ADAU1966A::TAG, "Reg 0x%x: 0x%x (-%f dB)", DAC01_VOL_REG + channel, attenuation_reg_value, attenuation_db);
+  ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, vol_buf, sizeof(vol_buf), 0));
 }

@@ -330,7 +330,7 @@ void ADAU1966A::setup_dac()
   ESP_ERROR_CHECK(i2c_master_transmit(this->dev_handle, dac_ctrl0_buf, sizeof(dac_ctrl0_buf), -1));
   vTaskDelay(pdMS_TO_TICKS(1));
 
-  this->set_volume(-40.0f);
+  this->set_volume(40.0f);
 }
 
 // Private functions

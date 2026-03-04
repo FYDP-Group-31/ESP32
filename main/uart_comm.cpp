@@ -377,8 +377,8 @@ void UART_Comm::run_control_data_recv_thread()
                 }
                 case CMD_VOL:
                 {
-                  uint8_t attenuation_db = this->control_payload_buf[0];
-                  float attenuation_db_float = static_cast<float>(attenuation_db);
+                  float attenuation_db_float;
+                  memcpy(&attenuation_db_float, this->control_payload_buf, sizeof(float));
                   dac->set_volume(attenuation_db_float);
                   ESP_LOGI("UART1", "Set volume to %.2f dB", attenuation_db_float);
                   CommPacketVolRes response = {

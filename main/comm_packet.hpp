@@ -19,6 +19,7 @@ typedef enum : uint8_t {
   CMD_AUDIO_DATA = 0x01U,
   CMD_RESET = 0x02U,
   CMD_POS = 0x03U,
+  CMD_VOL = 0x04U,
   CMD_SIZE
 } Command_E;
 
@@ -70,3 +71,14 @@ typedef struct __attribute__((packed)) {
   CommPacketHeader header;
   uint8_t reset_status;
 } CommPacketResetRes;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  float volume;
+} CommPacketVolReq;
+
+typedef struct __attribute__((packed)) {
+  CommPacketHeader header;
+  float volume;
+  uint8_t reg_value;
+} CommPacketVolRes;

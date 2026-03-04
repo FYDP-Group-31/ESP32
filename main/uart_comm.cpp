@@ -239,6 +239,12 @@ void UART_Comm::run_control_data_recv_thread()
                 state = STATE_READ_LEN;
                 break;
               }
+              case CMD_VOL:
+              {
+                header.cmd = CMD_VOL;
+                state = STATE_READ_LEN;
+                break;
+              }
               case CMD_AUDIO_DATA:
               default:
               {
@@ -367,6 +373,23 @@ void UART_Comm::run_control_data_recv_thread()
                     ESP_LOGI("UART1", "Sent reset response packet");
                   }
                   xTaskCreatePinnedToCore(&restart_task, "RestartTask", 64, (void*)request.wait_time_ms, 3, nullptr, tskNO_AFFINITY);
+                  break;
+                }
+                case CMD_VOL:
+                {
+                  uint8_t attenuation_db = this->control_payload_buf[0];
+                  float attenuation_db_float = static_cast<float>(attenuation_db);
+                  dac->set_volume(attenuation_db_float);
+                  ESP_LOGI("UART1", "Set volume to %.2f dB", attenuation_db_float);
+                  CommPacketVolRes response = {
+                    .header = response_header,
+                    .volume = attenuation_db_float,
+                    .reg_value = vol_db_to_reg(attenuation_db_float)
+                  };
+                  int bytes_written = uart_write_bytes(UART_NUM_1, (const char*)&response, sizeof(response));
+                  if (bytes_written != sizeof(response))                  {
+                    ESP_LOGE("UART1", "Failed to send volume response packet");
+                  }
                   break;
                 }
                 case CMD_AUDIO_DATA:

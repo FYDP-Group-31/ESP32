@@ -60,8 +60,6 @@ class ADAU1966A {
     static void i2s_thread_create(void* pv);
     void run_i2s_thread();
 
-    void set_volume(float new_attenuation_db);
-
     void signal_ringbuf_full();
     void signal_ringbuf_ready();
 
@@ -91,6 +89,7 @@ class ADAU1966A {
     size_t get_ringbuf_used_size();
 
     void set_integer_delay_offset(int16_t pos, uint16_t depth);
+    void set_volume(float new_attenuation_db);
 };
 
 bool init_adau1966a(gpio_num_t mclk_gpio, gpio_num_t bclk_gpio, gpio_num_t ws_gpio, gpio_num_t data_gpio);

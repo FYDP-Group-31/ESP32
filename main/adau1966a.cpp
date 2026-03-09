@@ -616,9 +616,13 @@ void ADAU1966A::set_integer_delay_offset(int16_t pos, uint16_t depth)
   constexpr float CM_TO_M = 0.01f;
 
   // Speaker positions along the array axis relative to center (cm)
+  // constexpr float array_pos_cm[TDM_SLOTS] = {
+  //   -68.6f, -54.5f, -42.5f, -32.4f, -23.7f, -16.1f, -9.3f, -3.1f,
+  //   3.1f, 9.3f, 16.1f, 23.7f, 32.4f, 42.5f, 54.5f, 68.6f
+  // };
   constexpr float array_pos_cm[TDM_SLOTS] = {
-    -68.6f, -54.5f, -42.5f, -32.4f, -23.7f, -16.1f, -9.3f, -3.1f,
-    3.1f, 9.3f, 16.1f, 23.7f, 32.4f, 42.5f, 54.5f, 68.6f
+    -4.125f, -1.875f, -0.75f, -0.375f, 0.0f, -0.0f, -0.0f, -0.375f,
+    -0.375f, -0.0f, -0.0f, 0.0f, -0.375f, -0.75f, -1.875f, -4.125f
   };
 
   // Compute distance from each speaker to the focal point (pos, depth) in cm

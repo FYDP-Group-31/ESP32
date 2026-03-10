@@ -331,15 +331,15 @@ void ADAU1966A::setup_dac()
   vTaskDelay(pdMS_TO_TICKS(1));
 
   this->set_volume(40.0f);
-  constexpr float channel_atten_db[TDM_SLOTS] = { // Honning + rectangular
-    9.375f, 8.625f, 7.125f, 4.875f, 3.0f, 1.5f, 0.375f, 0.0f,
-    0.0f, 0.375f, 1.5f, 3.0f, 4.875f, 7.125f, 8.625f, 9.375f
-  };
-  // constexpr channel_atten_db[TDM_SLOTS] = { // Optimizer
-  //   -4.125f, -1.875f, -0.75f, -0.375f, 0.0f, -0.0f, -0.0f, -0.375f,
-  //   -0.375f, -0.0f, -0.0f, 0.0f, -0.375f, -0.75f, -1.875f, -4.125f
+  // constexpr float channel_atten_db[TDM_SLOTS] = { // Honning + rectangular
+  //   9.375f, 8.625f, 7.125f, 4.875f, 3.0f, 1.5f, 0.375f, 0.0f,
+  //   0.0f, 0.375f, 1.5f, 3.0f, 4.875f, 7.125f, 8.625f, 9.375f
   // };
-  // constexpr channel_atten_db[TDM_SLOTS] = { // Hanning
+  constexpr float channel_atten_db[TDM_SLOTS] = { // Optimizer
+    -4.125f, -1.875f, -0.75f, -0.375f, 0.0f, -0.0f, -0.0f, -0.375f,
+    -0.375f, -0.0f, -0.0f, 0.0f, -0.375f, -0.75f, -1.875f, -4.125f
+  };
+  // constexpr float channel_atten_db[TDM_SLOTS] = { // Hanning
   //   -29.25f, -17.625f, -11.25f, -6.75f, -3.75f, -1.875f, -0.75f, 0.0f,
   //   0.0f, -0.75f, -1.875f, -3.75f, -6.75f, -11.25f, -17.625f, -29.25f
   // };

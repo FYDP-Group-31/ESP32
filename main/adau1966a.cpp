@@ -331,10 +331,18 @@ void ADAU1966A::setup_dac()
   vTaskDelay(pdMS_TO_TICKS(1));
 
   this->set_volume(40.0f);
-  constexpr float channel_atten_db[TDM_SLOTS] = {
+  constexpr float channel_atten_db[TDM_SLOTS] = { // Honning + rectangular
     9.375f, 8.625f, 7.125f, 4.875f, 3.0f, 1.5f, 0.375f, 0.0f,
     0.0f, 0.375f, 1.5f, 3.0f, 4.875f, 7.125f, 8.625f, 9.375f
   };
+  // constexpr channel_atten_db[TDM_SLOTS] = { // Optimizer
+  //   -4.125f, -1.875f, -0.75f, -0.375f, 0.0f, -0.0f, -0.0f, -0.375f,
+  //   -0.375f, -0.0f, -0.0f, 0.0f, -0.375f, -0.75f, -1.875f, -4.125f
+  // };
+  // constexpr channel_atten_db[TDM_SLOTS] = { // Hanning
+  //   -29.25f, -17.625f, -11.25f, -6.75f, -3.75f, -1.875f, -0.75f, 0.0f,
+  //   0.0f, -0.75f, -1.875f, -3.75f, -6.75f, -11.25f, -17.625f, -29.25f
+  // };
   for (uint8_t ch = 0; ch < TDM_SLOTS; ++ch)
   {
     this->set_channel_volume(ch, channel_atten_db[ch]);
@@ -616,18 +624,10 @@ void ADAU1966A::set_integer_delay_offset(int16_t pos, uint16_t depth)
   constexpr float CM_TO_M = 0.01f;
 
   // Speaker positions along the array axis relative to center (cm)
-  constexpr float array_pos_cm[TDM_SLOTS] = { // Hanning rectangular hybrid
+  constexpr float array_pos_cm[TDM_SLOTS] = {
     -68.6f, -54.5f, -42.5f, -32.4f, -23.7f, -16.1f, -9.3f, -3.1f,
     3.1f, 9.3f, 16.1f, 23.7f, 32.4f, 42.5f, 54.5f, 68.6f
   };
-  // constexpr float array_pos_cm[TDM_SLOTS] = { // Optimizer
-  //   -4.125f, -1.875f, -0.75f, -0.375f, 0.0f, -0.0f, -0.0f, -0.375f,
-  //   -0.375f, -0.0f, -0.0f, 0.0f, -0.375f, -0.75f, -1.875f, -4.125f
-  // };
-  // constexpr float array_pos_cm[TDM_SLOTS] = { // Hanning
-  //   -29.25f, -17.625f, -11.25f, -6.75f, -3.75f, -1.875f, -0.75f, 0.0f,
-  //   0.0f, -0.75f, -1.875f, -3.75f, -6.75f, -11.25f, -17.625f, -29.25f
-  // };
 
   // Compute distance from each speaker to the focal point (pos, depth) in cm
   float distance_cm[TDM_SLOTS];
